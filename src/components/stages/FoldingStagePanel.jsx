@@ -45,6 +45,17 @@ const FoldingStagePanel = ({ userId }) => {
 
   useEffect(() => {
     loadList();
+
+    const channel = supabase
+      .channel("realtime-folding-stage")
+      .on("postgres_changes", { event: "*", schema: "public", table: "lots" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "finishing" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "folding" }, loadList)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const openLot = async (lotId) => {

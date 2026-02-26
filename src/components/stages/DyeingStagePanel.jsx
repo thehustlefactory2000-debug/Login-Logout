@@ -37,6 +37,17 @@ const DyeingStagePanel = ({ userId }) => {
 
   useEffect(() => {
     loadList();
+
+    const channel = supabase
+      .channel("realtime-dyeing-stage")
+      .on("postgres_changes", { event: "*", schema: "public", table: "lots" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bleaching" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dyeing" }, loadList)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const openLot = async (lotId) => {

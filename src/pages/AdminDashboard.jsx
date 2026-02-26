@@ -172,6 +172,23 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchUsers();
     fetchLots();
+
+    const channel = supabase
+      .channel("realtime-admin-dashboard")
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, fetchUsers)
+      .on("postgres_changes", { event: "*", schema: "public", table: "lots" }, fetchLots)
+      .on("postgres_changes", { event: "*", schema: "public", table: "grey_inward" }, fetchLots)
+      .on("postgres_changes", { event: "*", schema: "public", table: "grey_checking" }, fetchLots)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bleaching" }, fetchLots)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dyeing" }, fetchLots)
+      .on("postgres_changes", { event: "*", schema: "public", table: "stenter" }, fetchLots)
+      .on("postgres_changes", { event: "*", schema: "public", table: "finishing" }, fetchLots)
+      .on("postgres_changes", { event: "*", schema: "public", table: "folding" }, fetchLots)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const updateField = (id, key, value) => {

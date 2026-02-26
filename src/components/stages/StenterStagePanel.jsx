@@ -37,6 +37,18 @@ const StenterStagePanel = ({ userId }) => {
 
   useEffect(() => {
     loadList();
+
+    const channel = supabase
+      .channel("realtime-stenter-stage")
+      .on("postgres_changes", { event: "*", schema: "public", table: "lots" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bleaching" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "dyeing" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "stenter" }, loadList)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const openLot = async (lotId) => {

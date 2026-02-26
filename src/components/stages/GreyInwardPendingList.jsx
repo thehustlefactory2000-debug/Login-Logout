@@ -30,6 +30,16 @@ const GreyInwardPendingList = ({ onCreateNew, onOpenLot }) => {
 
   useEffect(() => {
     loadRows();
+
+    const channel = supabase
+      .channel("realtime-grey-inward-list")
+      .on("postgres_changes", { event: "*", schema: "public", table: "lots" }, loadRows)
+      .on("postgres_changes", { event: "*", schema: "public", table: "grey_inward" }, loadRows)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   return (

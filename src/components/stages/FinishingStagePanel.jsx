@@ -44,6 +44,17 @@ const FinishingStagePanel = ({ userId }) => {
 
   useEffect(() => {
     loadList();
+
+    const channel = supabase
+      .channel("realtime-finishing-stage")
+      .on("postgres_changes", { event: "*", schema: "public", table: "lots" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "stenter" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "finishing" }, loadList)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const openLot = async (lotId) => {

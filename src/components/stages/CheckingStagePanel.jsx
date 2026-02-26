@@ -113,6 +113,17 @@ const CheckingStagePanel = ({ userId }) => {
 
   useEffect(() => {
     loadList();
+
+    const channel = supabase
+      .channel("realtime-checking-stage")
+      .on("postgres_changes", { event: "*", schema: "public", table: "lots" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "grey_inward" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "grey_checking" }, loadList)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));

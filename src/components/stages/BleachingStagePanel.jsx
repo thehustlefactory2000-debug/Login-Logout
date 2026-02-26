@@ -51,6 +51,17 @@ const BleachingStagePanel = ({ userId }) => {
 
   useEffect(() => {
     loadList();
+
+    const channel = supabase
+      .channel("realtime-bleaching-stage")
+      .on("postgres_changes", { event: "*", schema: "public", table: "lots" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "grey_checking" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "bleaching" }, loadList)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const openLot = async (lotId) => {
