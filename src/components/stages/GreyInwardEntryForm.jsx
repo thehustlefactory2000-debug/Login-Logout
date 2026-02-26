@@ -4,7 +4,7 @@ import { supabase } from "../../lib/supabaseClient";
 const CLOTH_TYPE_PRESETS = ["Cotton", "PC", "Dinear", "Roto"];
 const OTHER_CLOTH = "__other__";
 
-const GreyInwardEntryForm = ({ userId }) => {
+const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) => {
   const [partyName, setPartyName] = useState("");
   const [greyPartyName, setGreyPartyName] = useState("");
   const [clothType, setClothType] = useState("");
@@ -49,10 +49,68 @@ const GreyInwardEntryForm = ({ userId }) => {
     setClothTypeOptions([...new Set([...CLOTH_TYPE_PRESETS, ...dbTypes])]);
   };
 
+  const loadLotForEdit = async (lotId) => {
+    const { data: lot, error: lotError } = await supabase
+      .from("lots")
+      .select("id, lot_no, cloth_type, party:party_id(name), grey_party:grey_party_id(name)")
+      .eq("id", lotId)
+      .single();
+
+    if (lotError) throw lotError;
+
+    const { data: inward, error: inwardError } = await supabase
+      .from("grey_inward")
+      .select("id, meters, jodis, tagge, fold_details, border, is_locked")
+      .eq("lot_id", lotId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (inwardError) throw inwardError;
+
+    setCurrentLotId(lot.id);
+    setCurrentLotNo(lot.lot_no);
+    setPartyName(lot.party?.name || "");
+    setGreyPartyName(lot.grey_party?.name || "");
+
+    const lotClothType = lot.cloth_type || "";
+    if (lotClothType) {
+      setClothTypeOptions((prev) => (prev.includes(lotClothType) ? prev : [...prev, lotClothType]));
+      setSelectedClothType(lotClothType);
+      setClothType("");
+    } else {
+      setSelectedClothType("");
+      setClothType("");
+    }
+
+    setMeters(inward?.meters ?? "");
+    setJodis(inward?.jodis ?? "");
+    setTagge(inward?.tagge ?? "");
+    setFoldDetails(inward?.fold_details ?? "");
+    setBorder(inward?.border ?? "");
+    setIsLocked(Boolean(inward?.is_locked));
+  };
+
   useEffect(() => {
     loadNextLotPreview();
     loadClothTypes();
   }, []);
+
+  useEffect(() => {
+    if (!initialLotId) return;
+
+    const load = async () => {
+      setError("");
+      setSuccess("");
+      try {
+        await loadLotForEdit(initialLotId);
+      } catch (err) {
+        setError(err.message || "Failed to load lot for editing.");
+      }
+    };
+
+    load();
+  }, [initialLotId]);
 
   const searchParty = async (value, type, setter) => {
     let query = supabase
@@ -237,6 +295,7 @@ const GreyInwardEntryForm = ({ userId }) => {
       setCurrentLotNo(lotNo);
       setSuccess(`Saved. Lot No: ${lotNo}. You can edit and save again until you send to checking.`);
       await loadClothTypes();
+      if (onSaved) onSaved();
     } catch (err) {
       setError(err.message || "Failed to save grey inward entry.");
     } finally {
@@ -261,6 +320,7 @@ const GreyInwardEntryForm = ({ userId }) => {
 
       setIsLocked(true);
       setSuccess(`Lot No ${currentLotNo} sent to checking. Editing is now locked.`);
+      if (onSent) onSent();
     } catch (err) {
       setError(err.message || "Failed to send lot to checking.");
     } finally {
@@ -271,7 +331,7 @@ const GreyInwardEntryForm = ({ userId }) => {
   const disabled = isLocked || sending;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
+    <div className="glass-card p-4 sm:p-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-2">Grey Inward Entry</h2>
       <p className="text-sm text-gray-600 mb-4">
         Lot No: <span className="font-semibold">{currentLotNo ?? nextLotPreview ?? "-"}</span>
@@ -291,7 +351,7 @@ const GreyInwardEntryForm = ({ userId }) => {
               searchParty(e.target.value, "party", setPartySuggestions);
             }}
             onFocus={() => searchParty("", "party", setPartySuggestions)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            className="w-full px-3 py-2 rounded-xl glass-input outline-none"
             required
             disabled={disabled}
           />
@@ -310,7 +370,7 @@ const GreyInwardEntryForm = ({ userId }) => {
               searchParty(e.target.value, "grey_party", setGreyPartySuggestions);
             }}
             onFocus={() => searchParty("", "grey_party", setGreyPartySuggestions)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            className="w-full px-3 py-2 rounded-xl glass-input outline-none"
             required
             disabled={disabled}
           />
@@ -324,7 +384,7 @@ const GreyInwardEntryForm = ({ userId }) => {
           <select
             value={selectedClothType}
             onChange={(e) => setSelectedClothType(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            className="w-full px-3 py-2 rounded-xl glass-input outline-none"
             required
             disabled={disabled}
           >
@@ -343,7 +403,7 @@ const GreyInwardEntryForm = ({ userId }) => {
               type="text"
               value={clothType}
               onChange={(e) => setClothType(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2"
+              className="w-full px-3 py-2 rounded-xl glass-input outline-none"
               required
               disabled={disabled}
             />
@@ -354,38 +414,38 @@ const GreyInwardEntryForm = ({ userId }) => {
 
         <label className="text-sm">
           <span className="block mb-1 text-gray-700">Meters</span>
-          <input type="number" step="0.01" value={meters} onChange={(e) => setMeters(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" disabled={disabled} />
+          <input type="number" step="0.01" value={meters} onChange={(e) => setMeters(e.target.value)} className="w-full px-3 py-2 rounded-xl glass-input outline-none" disabled={disabled} />
         </label>
 
         <label className="text-sm">
           <span className="block mb-1 text-gray-700">Jodis</span>
-          <input type="number" value={jodis} onChange={(e) => setJodis(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" disabled={disabled} />
+          <input type="number" value={jodis} onChange={(e) => setJodis(e.target.value)} className="w-full px-3 py-2 rounded-xl glass-input outline-none" disabled={disabled} />
         </label>
 
         <label className="text-sm">
           <span className="block mb-1 text-gray-700">Tagge</span>
-          <input type="number" value={tagge} onChange={(e) => setTagge(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" disabled={disabled} />
+          <input type="number" value={tagge} onChange={(e) => setTagge(e.target.value)} className="w-full px-3 py-2 rounded-xl glass-input outline-none" disabled={disabled} />
         </label>
 
         <label className="text-sm sm:col-span-2">
           <span className="block mb-1 text-gray-700">Fold Details</span>
-          <input type="text" value={foldDetails} onChange={(e) => setFoldDetails(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" disabled={disabled} />
+          <input type="text" value={foldDetails} onChange={(e) => setFoldDetails(e.target.value)} className="w-full px-3 py-2 rounded-xl glass-input outline-none" disabled={disabled} />
         </label>
 
         <label className="text-sm sm:col-span-2">
           <span className="block mb-1 text-gray-700">Border</span>
-          <input type="text" value={border} onChange={(e) => setBorder(e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2" disabled={disabled} />
+          <input type="text" value={border} onChange={(e) => setBorder(e.target.value)} className="w-full px-3 py-2 rounded-xl glass-input outline-none" disabled={disabled} />
         </label>
 
         <div className="sm:col-span-2 flex flex-col sm:flex-row gap-2">
-          <button type="submit" disabled={saving || disabled} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm disabled:opacity-60">
+          <button type="submit" disabled={saving || disabled} className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold shadow-lg disabled:opacity-60">
             {saving ? "Saving..." : "Save"}
           </button>
-          <button type="button" onClick={sendToChecking} disabled={sending || !currentLotId || isLocked} className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm disabled:opacity-60">
+          <button type="button" onClick={sendToChecking} disabled={sending || !currentLotId || isLocked} className="px-4 py-2 rounded-xl bg-gradient-to-r from-gray-800 to-gray-900 text-white text-sm font-semibold shadow-lg disabled:opacity-60">
             {sending ? "Sending..." : "Send To Checking"}
           </button>
           {(isLocked || currentLotId) && (
-            <button type="button" onClick={startNewLot} className="px-4 py-2 rounded-lg bg-gray-100 border border-gray-300 text-sm">
+            <button type="button" onClick={startNewLot} className="px-4 py-2 rounded-xl bg-white/80 border border-gray-300 text-sm">
               Start New Lot
             </button>
           )}
@@ -396,3 +456,4 @@ const GreyInwardEntryForm = ({ userId }) => {
 };
 
 export default GreyInwardEntryForm;
+

@@ -147,7 +147,7 @@ const StageEntryForm = ({ config, userId }) => {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6">
+    <div className="glass-card p-4 sm:p-6">
       <h2 className="text-xl font-semibold text-gray-900 mb-4">{config.title}</h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 mb-4">
@@ -156,13 +156,13 @@ const StageEntryForm = ({ config, userId }) => {
           placeholder="Enter Lot No"
           value={lotNo}
           onChange={(e) => setLotNo(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg px-3 py-2"
+          className="w-full px-3 py-2 rounded-xl glass-input outline-none"
         />
         <button
           type="button"
           onClick={findLot}
           disabled={lookupLoading}
-          className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm disabled:opacity-60"
+          className="px-4 py-2 rounded-xl bg-gradient-to-r from-gray-800 to-gray-900 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
         >
           {lookupLoading ? "Searching..." : "Search Lot"}
         </button>
@@ -204,7 +204,7 @@ const StageEntryForm = ({ config, userId }) => {
               <select
                 value={form[field.key]}
                 onChange={(e) => setField(field.key, e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                className="w-full px-3 py-2 rounded-xl glass-input outline-none"
                 required
               >
                 <option value="">Select {field.label}</option>
@@ -222,7 +222,7 @@ const StageEntryForm = ({ config, userId }) => {
                 step="0.01"
                 value={form[field.key]}
                 onChange={(e) => setField(field.key, e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                className="w-full px-3 py-2 rounded-xl glass-input outline-none"
               />
             )}
 
@@ -231,7 +231,7 @@ const StageEntryForm = ({ config, userId }) => {
                 type="text"
                 value={form[field.key]}
                 onChange={(e) => setField(field.key, e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                className="w-full px-3 py-2 rounded-xl glass-input outline-none"
               />
             )}
 
@@ -252,7 +252,7 @@ const StageEntryForm = ({ config, userId }) => {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full sm:w-auto px-4 py-2 rounded-lg bg-blue-600 text-white text-sm disabled:opacity-60"
+            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
           >
             {submitting ? "Saving..." : "Save Stage Record"}
           </button>
@@ -263,3 +263,4 @@ const StageEntryForm = ({ config, userId }) => {
 };
 
 export default StageEntryForm;
+
