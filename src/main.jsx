@@ -2,7 +2,8 @@ import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import App from './App.jsx';
-import AuthGuard from './components/AuthGuard';
+import RoleGuard from './components/RoleGuard';
+import { AuthProvider } from './context/AuthContext';
 import './index.css';
 
 // Lazy load pages
@@ -11,6 +12,7 @@ const SignUp = lazy(() => import('./pages/SignUp.jsx'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword.jsx'));
 const UpdatePassword = lazy(() => import('./pages/UpdatePassword.jsx'));
 const Dashboard = lazy(() => import('./pages/Dashboard.jsx'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard.jsx'));
 
 // Loading component
 const Loading = () => (
@@ -61,8 +63,22 @@ const router = createBrowserRouter([
         ),
       },
       {
+        path: "admin",
+        element: <RoleGuard allowedRoles={["admin"]} />,
+        children: [
+          {
+            index: true,
+            element: (
+              <Suspense fallback={<Loading />}>
+                <AdminDashboard />
+              </Suspense>
+            ),
+          },
+        ],
+      },
+      {
         path: "dashboard",
-        element: <AuthGuard />,
+        element: <RoleGuard allowedRoles={["staff"]} />,
         children: [
           {
             index: true,
@@ -84,6 +100,8 @@ const router = createBrowserRouter([
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <AuthProvider>
+      <RouterProvider router={router} />
+    </AuthProvider>
   </React.StrictMode>,
 );

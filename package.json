@@ -8,9 +8,9 @@
                     "build":  "vite build",
                     "lint":  "eslint .",
                     "preview":  "vite preview",
-                    "firebase:login":  "npx firebase-tools login",
+                    "firebase:login":  "npx firebase-tools login --no-localhost",
                     "firebase:init":  "npx firebase-tools init hosting",
-                    "deploy":  "npm run build \u0026\u0026 npx firebase-tools deploy --only hosting"
+                    "deploy":  "npm run build \u0026\u0026 npx firebase-tools deploy --only hosting --project process-c6903"
                 },
     "dependencies":  {
                          "@supabase/supabase-js":  "^2.97.0",

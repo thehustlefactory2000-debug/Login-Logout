@@ -6,9 +6,13 @@ create table if not exists public.profiles (
   email text not null unique,
   name text,
   role text not null default 'staff' check (role in ('admin', 'staff')),
+  assigned_stage text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.profiles
+add column if not exists assigned_stage text;
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -90,12 +94,13 @@ to authenticated
 with check (auth.uid() = id or public.current_user_role() = 'admin');
 
 drop policy if exists "profiles_update_own_or_admin" on public.profiles;
-create policy "profiles_update_own_or_admin"
+drop policy if exists "profiles_update_admin_only" on public.profiles;
+create policy "profiles_update_admin_only"
 on public.profiles
 for update
 to authenticated
-using (auth.uid() = id or public.current_user_role() = 'admin')
-with check (auth.uid() = id or public.current_user_role() = 'admin');
+using (public.current_user_role() = 'admin')
+with check (public.current_user_role() = 'admin');
 
 drop policy if exists "profiles_delete_admin_only" on public.profiles;
 create policy "profiles_delete_admin_only"

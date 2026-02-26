@@ -18,12 +18,13 @@ to authenticated
 with check (auth.uid() = id or public.current_user_role() = 'admin');
 
 drop policy if exists "profiles_update_own_or_admin" on public.profiles;
-create policy "profiles_update_own_or_admin"
+drop policy if exists "profiles_update_admin_only" on public.profiles;
+create policy "profiles_update_admin_only"
 on public.profiles
 for update
 to authenticated
-using (auth.uid() = id or public.current_user_role() = 'admin')
-with check (auth.uid() = id or public.current_user_role() = 'admin');
+using (public.current_user_role() = 'admin')
+with check (public.current_user_role() = 'admin');
 
 drop policy if exists "profiles_delete_admin_only" on public.profiles;
 create policy "profiles_delete_admin_only"

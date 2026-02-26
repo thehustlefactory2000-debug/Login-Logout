@@ -25,9 +25,25 @@ const SignIn = () => {
     setNotice("");
 
     try {
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.signInWithPassword({ email, password });
       if (authError) throw authError;
-      navigate("/dashboard");
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError) throw profileError;
+
+      if (profile?.role === "admin") {
+        navigate("/admin", { replace: true });
+      } else {
+        navigate("/dashboard", { replace: true });
+      }
     } catch (err) {
       const message = err?.message?.toLowerCase() || "";
       if (err?.message?.toLowerCase().includes("invalid login credentials")) {
