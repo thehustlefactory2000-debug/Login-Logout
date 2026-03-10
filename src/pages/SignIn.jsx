@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNavigate, Link, useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 const SignIn = () => {
   const [email, setEmail] = useState("");
@@ -10,6 +11,33 @@ const SignIn = () => {
   const [notice, setNotice] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, profile, loading: authLoading, profileLoading } = useAuth();
+
+  React.useEffect(() => {
+    if (authLoading || profileLoading || !user) return;
+
+    if (profile?.role === "admin") {
+      navigate("/admin", { replace: true });
+    } else if (profile?.role === "staff") {
+      navigate("/dashboard", { replace: true });
+    } else {
+      const resolveRoleAndRedirect = async () => {
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (profileData?.role === "admin") {
+          navigate("/admin", { replace: true });
+        } else if (profileData?.role === "staff") {
+          navigate("/dashboard", { replace: true });
+        }
+      };
+
+      resolveRoleAndRedirect();
+    }
+  }, [authLoading, navigate, profile?.role, profileLoading, user]);
 
   React.useEffect(() => {
     if (location.state?.notice) {
@@ -58,8 +86,16 @@ const SignIn = () => {
     }
   };
 
+  if (authLoading || profileLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-600"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md animate-slide-up">
         <div className="glass-card p-8 sm:p-10">
           {/* Header */}
@@ -122,7 +158,7 @@ const SignIn = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="********"
                 className="w-full px-4 py-3 rounded-xl glass-input outline-none transition-all duration-300"
                 required
               />
@@ -131,7 +167,7 @@ const SignIn = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+              className="w-full py-3.5 px-4 btn-primary disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
             >
               {loading ? (
                 <span className="flex items-center justify-center">
@@ -163,3 +199,4 @@ const SignIn = () => {
 };
 
 export default SignIn;
+

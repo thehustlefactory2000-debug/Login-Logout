@@ -58,7 +58,7 @@ const StageEntryForm = ({ config, userId }) => {
       if (isCheckingStage) {
         const { data: inward, error: inwardError } = await supabase
           .from("grey_inward")
-          .select("meters, jodis, tagge, fold_details, border, is_locked, created_at")
+          .select("meters, jodis, length, width, quantity, tagge, fold_details, border, is_locked, created_at")
           .eq("lot_id", data.id)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -148,7 +148,7 @@ const StageEntryForm = ({ config, userId }) => {
 
   return (
     <div className="glass-card p-4 sm:p-6">
-      <h2 className="text-xl font-semibold text-gray-900 mb-4">{config.title}</h2>
+      <h2 className="text-xl surface-title mb-4">{config.title}</h2>
 
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 mb-4">
         <input
@@ -162,7 +162,7 @@ const StageEntryForm = ({ config, userId }) => {
           type="button"
           onClick={findLot}
           disabled={lookupLoading}
-          className="px-4 py-2 rounded-xl bg-gradient-to-r from-gray-800 to-gray-900 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
+          className="btn-dark disabled:opacity-60"
         >
           {lookupLoading ? "Searching..." : "Search Lot"}
         </button>
@@ -186,6 +186,9 @@ const StageEntryForm = ({ config, userId }) => {
           <p>Cloth Type: <span className="font-medium">{lot.cloth_type || "-"}</span></p>
           <p>Meters: <span className="font-medium">{sourceDetails?.meters ?? "-"}</span></p>
           <p>Jodis: <span className="font-medium">{sourceDetails?.jodis ?? "-"}</span></p>
+          <p>Length: <span className="font-medium">{sourceDetails?.length ?? "-"}</span></p>
+          <p>Width: <span className="font-medium">{sourceDetails?.width ?? "-"}</span></p>
+          <p>Quantity: <span className="font-medium">{sourceDetails?.quantity || "-"}</span></p>
           <p>Tagge: <span className="font-medium">{sourceDetails?.tagge ?? "-"}</span></p>
           <p>Fold Details: <span className="font-medium">{sourceDetails?.fold_details || "-"}</span></p>
           <p>Border: <span className="font-medium">{sourceDetails?.border || "-"}</span></p>
@@ -252,7 +255,7 @@ const StageEntryForm = ({ config, userId }) => {
           <button
             type="submit"
             disabled={submitting}
-            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
+            className="w-full sm:w-auto btn-primary disabled:opacity-60"
           >
             {submitting ? "Saving..." : "Save Stage Record"}
           </button>
@@ -263,4 +266,6 @@ const StageEntryForm = ({ config, userId }) => {
 };
 
 export default StageEntryForm;
+
+
 

@@ -6,6 +6,17 @@ import RoleGuard from './components/RoleGuard';
 import { AuthProvider } from './context/AuthContext';
 import './index.css';
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(
+      registrations
+        .filter((registration) => registration.active?.scriptURL?.includes('/service-worker.js'))
+        .map((registration) => registration.unregister()),
+    );
+  });
+}
+
 // Lazy load pages
 const SignIn = lazy(() => import('./pages/SignIn.jsx'));
 const SignUp = lazy(() => import('./pages/SignUp.jsx'));
@@ -16,8 +27,11 @@ const AdminDashboard = lazy(() => import('./pages/AdminDashboard.jsx'));
 
 // Loading component
 const Loading = () => (
-  <div className="min-h-screen flex items-center justify-center bg-gray-50">
-    <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600"></div>
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="glass-card p-6 sm:p-8 flex flex-col items-center gap-3 animate-scale-in">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-blue-600"></div>
+      <p className="text-sm text-slate-600">Loading workspace...</p>
+    </div>
   </div>
 );
 

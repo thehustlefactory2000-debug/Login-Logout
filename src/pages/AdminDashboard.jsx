@@ -106,10 +106,14 @@ const AdminDashboard = () => {
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [savingId, setSavingId] = useState("");
+  const [deletingId, setDeletingId] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const [filters, setFilters] = useState(initialFilters);
   const [lots, setLots] = useState([]);
   const [loadingLots, setLoadingLots] = useState(false);
+  const [deletingLotId, setDeletingLotId] = useState("");
+  const [deleteLotTarget, setDeleteLotTarget] = useState(null);
 
   const fetchUsers = async () => {
     setLoadingUsers(true);
@@ -218,6 +222,49 @@ const AdminDashboard = () => {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     navigate("/signin");
+  };
+
+  const deleteStaff = async (user) => {
+    if (user.role !== "staff") {
+      setError("Only staff users can be deleted.");
+      return;
+    }
+
+    setDeletingId(user.id);
+    setError("");
+    setSuccess("");
+
+    const { error: deleteError } = await supabase.from("profiles").delete().eq("id", user.id);
+
+    if (deleteError) {
+      setError(deleteError.message || "Failed to delete staff.");
+    } else {
+      setDeleteTarget(null);
+      setSuccess("Staff deleted.");
+      await fetchUsers();
+    }
+
+    setDeletingId("");
+  };
+
+  const deleteLot = async (lot) => {
+    if (!lot?.id) return;
+
+    setDeletingLotId(lot.id);
+    setError("");
+    setSuccess("");
+
+    const { error: deleteError } = await supabase.from("lots").delete().eq("id", lot.id);
+
+    if (deleteError) {
+      setError(deleteError.message || "Failed to delete lot.");
+    } else {
+      setDeleteLotTarget(null);
+      setSuccess(`Lot #${lot.lot_no} deleted from all stages.`);
+      await fetchLots();
+    }
+
+    setDeletingLotId("");
   };
 
   const stats = useMemo(() => {
@@ -393,13 +440,26 @@ const AdminDashboard = () => {
                     </label>
                   </div>
 
-                  <button
-                    onClick={() => saveUser(u)}
-                    disabled={savingId === u.id}
-                    className="mt-3 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
-                  >
-                    {savingId === u.id ? "Saving..." : "Save"}
-                  </button>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => saveUser(u)}
+                      disabled={savingId === u.id}
+                      className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
+                    >
+                      {savingId === u.id ? "Saving..." : "Save"}
+                    </button>
+
+                    {u.role === "staff" && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteTarget(u)}
+                        disabled={deletingId === u.id}
+                        className="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
+                      >
+                        Delete Staff
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
           </div>
@@ -544,16 +604,17 @@ const AdminDashboard = () => {
                     <th className="py-2 pr-3">Stage</th>
                     <th className="py-2 pr-3">Status</th>
                     <th className="py-2 pr-3">Party</th>
-                    <th className="py-2 pr-3">Grey Party</th>
-                    <th className="py-2 pr-3">Cloth</th>
-                    <th className="py-2 pr-3">Processed Meters</th>
-                    <th className="py-2 pr-3">Created At</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {!loadingLots && !lots.length && (
-                    <tr>
-                      <td colSpan={8} className="py-4 text-gray-500">
+                  <th className="py-2 pr-3">Grey Party</th>
+                  <th className="py-2 pr-3">Cloth</th>
+                  <th className="py-2 pr-3">Processed Meters</th>
+                  <th className="py-2 pr-3">Created At</th>
+                  <th className="py-2 pr-3">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!loadingLots && !lots.length && (
+                  <tr>
+                      <td colSpan={9} className="py-4 text-gray-500">
                         No lots found for selected filters.
                       </td>
                     </tr>
@@ -568,6 +629,16 @@ const AdminDashboard = () => {
                       <td className="py-2 pr-3">{lot.cloth_type || "-"}</td>
                       <td className="py-2 pr-3">{getProcessedMeters(lot).toFixed(2)}</td>
                       <td className="py-2 pr-3">{toPrintableDate(lot.created_at)}</td>
+                      <td className="py-2 pr-3">
+                        <button
+                          type="button"
+                          onClick={() => setDeleteLotTarget(lot)}
+                          disabled={deletingLotId === lot.id}
+                          className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold shadow disabled:opacity-60"
+                        >
+                          Delete
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -576,6 +647,80 @@ const AdminDashboard = () => {
           </div>
         )}
       </div>
+
+      {deleteLotTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => {
+              if (!deletingLotId) setDeleteLotTarget(null);
+            }}
+          />
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-900">Delete Lot</h3>
+            <p className="mt-2 text-sm text-gray-700">
+              Delete lot <span className="font-semibold">#{deleteLotTarget.lot_no}</span> from all workflow stages?
+            </p>
+            <p className="mt-1 text-xs text-gray-500">This action cannot be undone.</p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteLotTarget(null)}
+                disabled={Boolean(deletingLotId)}
+                className="px-4 py-2 rounded-xl bg-white border border-gray-300 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteLot(deleteLotTarget)}
+                disabled={deletingLotId === deleteLotTarget.id}
+                className="px-4 py-2 rounded-xl bg-red-700 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
+              >
+                {deletingLotId === deleteLotTarget.id ? "Deleting..." : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => {
+              if (!deletingId) setDeleteTarget(null);
+            }}
+          />
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold text-gray-900">Delete Staff Account</h3>
+            <p className="mt-2 text-sm text-gray-700">
+              Delete <span className="font-semibold">{deleteTarget.name || deleteTarget.email}</span>?
+            </p>
+            <p className="mt-1 text-xs text-gray-500">This action cannot be undone.</p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                disabled={Boolean(deletingId)}
+                className="px-4 py-2 rounded-xl bg-white border border-gray-300 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteStaff(deleteTarget)}
+                disabled={deletingId === deleteTarget.id}
+                className="px-4 py-2 rounded-xl bg-red-700 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
+              >
+                {deletingId === deleteTarget.id ? "Deleting..." : "Confirm Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

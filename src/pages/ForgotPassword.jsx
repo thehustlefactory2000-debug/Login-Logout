@@ -29,7 +29,7 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md animate-slide-up">
         <div className="glass-card p-8 sm:p-10">
           <div className="text-center mb-8">
@@ -72,7 +72,7 @@ const ForgotPassword = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+              className="w-full py-3.5 px-4 btn-primary disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
             >
               {loading ? "Sending..." : "Send Reset Link"}
             </button>

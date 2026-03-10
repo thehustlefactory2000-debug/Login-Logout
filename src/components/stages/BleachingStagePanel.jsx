@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { buildSearchIndex, filterIndexedRows } from "../../lib/stageSearch";
 
 const BLEACH_TYPE_OPTIONS = [
   "hand_poly",
@@ -20,6 +21,7 @@ const BleachingStagePanel = ({ userId }) => {
   const [bleachLotNo, setBleachLotNo] = useState(null);
   const [recordLocked, setRecordLocked] = useState(false);
   const [form, setForm] = useState({ bleach_type: "", next_stage: "" });
+  const [search, setSearch] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -63,6 +65,26 @@ const BleachingStagePanel = ({ userId }) => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const indexedRows = useMemo(
+    () =>
+      rows.map((lot) => {
+      const checking = Array.isArray(lot.grey_checking) ? lot.grey_checking[0] : lot.grey_checking;
+      const bleaching = Array.isArray(lot.bleaching) ? lot.bleaching[0] : lot.bleaching;
+        return {
+          row: lot,
+          index: buildSearchIndex({
+            lot: lot.lot_no,
+            checked: checking?.checked_meters,
+            tagga: checking?.taggas,
+            bleached: bleaching?.bleach_group_no,
+          }),
+        };
+      }),
+    [rows],
+  );
+
+  const filteredRows = useMemo(() => filterIndexedRows(indexedRows, search), [indexedRows, search]);
 
   const openLot = async (lotId) => {
     setLoading(true);
@@ -193,12 +215,12 @@ const BleachingStagePanel = ({ userId }) => {
     return (
       <div className="glass-card p-4 sm:p-6">
         <div className="flex items-center justify-between gap-2 mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">Bleaching Dashboard</h2>
+          <h2 className="text-xl surface-title">Bleaching Dashboard</h2>
           <button
             type="button"
             onClick={loadList}
             disabled={loading}
-            className="px-3 py-1.5 rounded-lg bg-gray-100 border border-gray-300 text-sm disabled:opacity-60"
+            className="btn-secondary btn-sm disabled:opacity-60"
           >
             {loading ? "Refreshing..." : "Refresh"}
           </button>
@@ -206,23 +228,33 @@ const BleachingStagePanel = ({ userId }) => {
 
         {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
 
+        <div className="mb-3">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search (e.g. lot:120, checked:520, tagga:16)"
+            className="w-full sm:max-w-md px-3 py-2 rounded-xl glass-input outline-none text-sm"
+          />
+        </div>
+
         {loading ? (
           <p className="text-sm text-gray-600">Loading lots in bleaching stage...</p>
-        ) : rows.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <p className="text-sm text-gray-600">No lots are currently in bleaching stage.</p>
         ) : (
           <div className="space-y-3">
-            {rows.map((lot) => {
+            {filteredRows.map((lot) => {
               const checking = Array.isArray(lot.grey_checking) ? lot.grey_checking[0] : lot.grey_checking;
               const bleaching = Array.isArray(lot.bleaching) ? lot.bleaching[0] : lot.bleaching;
               return (
-                <div key={lot.id} className="rounded-lg border border-gray-200 p-3 text-sm">
+                <div key={lot.id} className="rounded-xl border border-slate-200/80 bg-white/70 p-3 text-sm shadow-sm">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-semibold text-gray-900">Lot #{lot.lot_no}</p>
                     <button
                       type="button"
                       onClick={() => openLot(lot.id)}
-                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-gray-800 to-gray-900 text-white text-xs font-semibold shadow"
+                      className="btn-dark btn-sm"
                     >
                       Open
                     </button>
@@ -255,13 +287,13 @@ const BleachingStagePanel = ({ userId }) => {
           setError("");
           setSuccess("");
         }}
-        className="px-4 py-2 rounded-xl bg-white/80 border border-gray-300 text-sm"
+        className="btn-secondary"
       >
         Back To Bleaching Dashboard
       </button>
 
       <div className="glass-card p-4 sm:p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Bleaching Entry</h2>
+        <h2 className="text-xl surface-title mb-2">Bleaching Entry</h2>
         <p className="text-sm text-gray-600">Lot No: <span className="font-semibold">{lotData?.lot_no}</span></p>
         <p className="text-sm text-gray-600 mb-4">Bleached Lot No: <span className="font-semibold">{bleachLotNo || "Will generate on save"}</span></p>
 
@@ -310,7 +342,7 @@ const BleachingStagePanel = ({ userId }) => {
             <button
               type="submit"
               disabled={saving || recordLocked || sending}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
+              className="btn-primary disabled:opacity-60"
             >
               {saving ? "Saving..." : "Save"}
             </button>
@@ -318,7 +350,7 @@ const BleachingStagePanel = ({ userId }) => {
               type="button"
               onClick={sendToNextStage}
               disabled={sending || recordLocked || !lotData?.id}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-gray-800 to-gray-900 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
+              className="btn-dark disabled:opacity-60"
             >
               {sending ? "Sending..." : "Send To Next Stage"}
             </button>
@@ -330,4 +362,8 @@ const BleachingStagePanel = ({ userId }) => {
 };
 
 export default BleachingStagePanel;
+
+
+
+
 

@@ -1,24 +1,43 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { buildSearchIndex, filterIndexedRows } from "../../lib/stageSearch";
 
 const CHECKING_METHOD_OPTIONS = [
-  "cotton_fabric",
-  "cotton",
-  "stamp",
-  "poly_stamp",
-  "roto_stamp",
-  "roto_tube",
+  "Cotton_fabric/Poly_stamp",
+  "Cotton_tube",
+  "Roto/Plain_tube",
+  "Roto_stamp",
   "others",
 ];
 
+const CHECKING_METHOD_TO_DB = {
+  "Cotton_fabric/Poly_stamp": "cotton_fabric",
+  Cotton_tube: "cotton",
+  "Roto/Plain_tube": "roto_tube",
+  Roto_stamp: "roto_stamp",
+  others: "others",
+};
+
+const DB_TO_CHECKING_METHOD = {
+  cotton_fabric: "Cotton_fabric/Poly_stamp",
+  cotton: "Cotton_tube",
+  stamp: "Cotton_fabric/Poly_stamp",
+  poly_stamp: "Cotton_fabric/Poly_stamp",
+  roto_tube: "Roto/Plain_tube",
+  roto_stamp: "Roto_stamp",
+  others: "others",
+};
+
 const emptyForm = {
   checking_method: "",
+  checker_name: "",
   input_meters: "",
   checked_meters: "",
   jodis: "",
   taggas: "",
   tp: "",
   fold: "",
+  border: "",
   less_short: "",
 };
 
@@ -30,6 +49,10 @@ const CheckingStagePanel = ({ userId }) => {
   const [form, setForm] = useState(emptyForm);
   const [recordId, setRecordId] = useState(null);
   const [recordLocked, setRecordLocked] = useState(false);
+  const [search, setSearch] = useState("");
+  const [checkerNameSuggestions, setCheckerNameSuggestions] = useState([]);
+  const [borderSuggestions, setBorderSuggestions] = useState([]);
+  const [lessShortEdited, setLessShortEdited] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -44,7 +67,7 @@ const CheckingStagePanel = ({ userId }) => {
       const { data, error: listError } = await supabase
         .from("lots")
         .select(
-          "id, lot_no, cloth_type, created_at, party:party_id(name), grey_party:grey_party_id(name), grey_inward!inner(meters, jodis, tagge, fold_details, border)",
+          "id, lot_no, cloth_type, created_at, party:party_id(name), grey_party:grey_party_id(name), grey_inward!inner(meters, jodis, length, width, quantity, tagge, fold_details, border)",
         )
         .eq("current_stage", "checking")
         .eq("status", "active")
@@ -67,7 +90,7 @@ const CheckingStagePanel = ({ userId }) => {
       const { data: lot, error: lotError } = await supabase
         .from("lots")
         .select(
-          "id, lot_no, cloth_type, current_stage, status, party:party_id(name), grey_party:grey_party_id(name), grey_inward!inner(meters, jodis, tagge, fold_details, border)",
+          "id, lot_no, cloth_type, current_stage, status, party:party_id(name), grey_party:grey_party_id(name), grey_inward!inner(meters, jodis, length, width, quantity, tagge, fold_details, border)",
         )
         .eq("id", lotId)
         .single();
@@ -80,28 +103,58 @@ const CheckingStagePanel = ({ userId }) => {
       const inward = Array.isArray(lot.grey_inward) ? lot.grey_inward[0] : lot.grey_inward;
       if (!inward) throw new Error("Grey inward data not found for this lot.");
 
-      const { data: existing, error: checkingError } = await supabase
+      let existing = null;
+      const { data: withNewCols, error: checkingError } = await supabase
         .from("grey_checking")
-        .select("id, checking_method, input_meters, checked_meters, jodis, taggas, tp, fold, less_short, is_locked")
+        .select("id, checking_method, checker_name, input_meters, checked_meters, jodis, taggas, tp, fold, border, less_short, is_locked")
         .eq("lot_id", lotId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (checkingError) throw checkingError;
+      if (checkingError) {
+        const message = checkingError.message || "";
+        const missingCheckerCols = message.includes("checker_name") || message.includes("border");
+        if (missingCheckerCols) {
+          const { data: legacy, error: legacyError } = await supabase
+            .from("grey_checking")
+            .select("id, checking_method, input_meters, checked_meters, jodis, taggas, tp, fold, less_short, is_locked")
+            .eq("lot_id", lotId)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (legacyError) throw legacyError;
+          existing = legacy;
+        } else {
+          throw checkingError;
+        }
+      } else {
+        existing = withNewCols;
+      }
 
       setLotData(lot);
       setRecordId(existing?.id || null);
       setRecordLocked(Boolean(existing?.is_locked));
+      setLessShortEdited(false);
+      const initialJodis = existing?.jodis ?? inward.jodis ?? "";
+      const calculatedLessShort = (() => {
+        const inwardJodis = Number(inward?.jodis ?? "");
+        const checkedJodis = Number(initialJodis);
+        if (!Number.isFinite(inwardJodis) || !Number.isFinite(checkedJodis)) return "";
+        return Math.max(inwardJodis - checkedJodis, 0);
+      })();
+
       setForm({
-        checking_method: existing?.checking_method || "",
+        checking_method: DB_TO_CHECKING_METHOD[existing?.checking_method] || "",
+        checker_name: existing?.checker_name || "",
         input_meters: existing?.input_meters ?? inward.meters ?? "",
         checked_meters: existing?.checked_meters ?? "",
-        jodis: existing?.jodis ?? inward.jodis ?? "",
+        jodis: initialJodis,
         taggas: existing?.taggas ?? inward.tagge ?? "",
         tp: existing?.tp || "",
         fold: existing?.fold ?? inward.fold_details ?? "",
-        less_short: existing?.less_short ?? "",
+        border: existing?.border ?? inward.border ?? "",
+        less_short: existing?.less_short ?? calculatedLessShort,
       });
       setMode("form");
     } catch (e) {
@@ -126,7 +179,95 @@ const CheckingStagePanel = ({ userId }) => {
     };
   }, []);
 
+  const indexedRows = useMemo(
+    () =>
+      rows.map((lot) => {
+      const inward = Array.isArray(lot.grey_inward) ? lot.grey_inward[0] : lot.grey_inward;
+        return {
+          row: lot,
+          index: buildSearchIndex({
+            lot: lot.lot_no,
+            party: lot.party?.name,
+            grey_party: lot.grey_party?.name,
+            cloth: lot.cloth_type,
+            meters: inward?.meters,
+            jodis: inward?.jodis,
+            length: inward?.length,
+            width: inward?.width,
+            quantity: inward?.quantity,
+            qty: inward?.quantity,
+            tagge: inward?.tagge,
+          }),
+        };
+      }),
+    [rows],
+  );
+
+  const filteredRows = useMemo(() => filterIndexedRows(indexedRows, search), [indexedRows, search]);
+
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  const inward = useMemo(() => {
+    if (!lotData?.grey_inward) return null;
+    return Array.isArray(lotData.grey_inward) ? lotData.grey_inward[0] : lotData.grey_inward;
+  }, [lotData]);
+
+  const calculatedLessShort = useMemo(() => {
+    const inwardJodis = Number(inward?.jodis ?? "");
+    const checkedJodis = Number(form.jodis ?? "");
+    if (!Number.isFinite(inwardJodis) || !Number.isFinite(checkedJodis)) return "";
+    return Math.max(inwardJodis - checkedJodis, 0);
+  }, [inward, form.jodis]);
+
+  useEffect(() => {
+    if (recordLocked) return;
+    if (lessShortEdited) return;
+    setForm((prev) => ({ ...prev, less_short: calculatedLessShort }));
+  }, [calculatedLessShort, recordLocked, lessShortEdited]);
+
+  const searchCheckerNames = async (value) => {
+    let query = supabase
+      .from("grey_checking")
+      .select("checker_name")
+      .not("checker_name", "is", null)
+      .order("checker_name", { ascending: true })
+      .limit(15);
+
+    if (value.trim()) query = query.ilike("checker_name", `%${value.trim()}%`);
+    const { data, error: queryError } = await query;
+    if (queryError) {
+      const message = queryError.message || "";
+      if (message.includes("checker_name")) {
+        setCheckerNameSuggestions([]);
+        return;
+      }
+      throw queryError;
+    }
+    const uniqueNames = [...new Set((data || []).map((row) => row.checker_name).filter(Boolean))];
+    setCheckerNameSuggestions(uniqueNames.slice(0, 8));
+  };
+
+  const searchBorderSuggestions = async (value) => {
+    let query = supabase
+      .from("grey_checking")
+      .select("border")
+      .not("border", "is", null)
+      .order("border", { ascending: true })
+      .limit(20);
+
+    if (value.trim()) query = query.ilike("border", `%${value.trim()}%`);
+    const { data, error: queryError } = await query;
+    if (queryError) {
+      const message = queryError.message || "";
+      if (message.includes("border")) {
+        setBorderSuggestions([]);
+        return;
+      }
+      throw queryError;
+    }
+    const uniqueValues = [...new Set((data || []).map((row) => row.border).filter(Boolean))];
+    setBorderSuggestions(uniqueValues.slice(0, 8));
+  };
 
   const save = async (e) => {
     e.preventDefault();
@@ -150,13 +291,15 @@ const CheckingStagePanel = ({ userId }) => {
     try {
       const payload = {
         lot_id: lotData.id,
-        checking_method: form.checking_method,
+        checking_method: CHECKING_METHOD_TO_DB[form.checking_method] || form.checking_method,
+        checker_name: form.checker_name.trim() || null,
         input_meters: form.input_meters === "" ? null : Number(form.input_meters),
         checked_meters: form.checked_meters === "" ? null : Number(form.checked_meters),
         jodis: form.jodis === "" ? null : Number(form.jodis),
         taggas: form.taggas === "" ? null : Number(form.taggas),
         tp: form.tp.trim() || null,
         fold: form.fold.trim() || null,
+        border: form.border.trim() || null,
         less_short: form.less_short === "" ? null : Number(form.less_short),
         created_by: userId,
       };
@@ -166,24 +309,74 @@ const CheckingStagePanel = ({ userId }) => {
           .from("grey_checking")
           .update({
             checking_method: payload.checking_method,
+            checker_name: payload.checker_name,
             input_meters: payload.input_meters,
             checked_meters: payload.checked_meters,
             jodis: payload.jodis,
             taggas: payload.taggas,
             tp: payload.tp,
             fold: payload.fold,
+            border: payload.border,
             less_short: payload.less_short,
           })
           .eq("id", recordId);
-        if (updateError) throw updateError;
+        if (updateError) {
+          const message = updateError.message || "";
+          const missingCols = message.includes("checker_name") || message.includes("border");
+          if (missingCols) {
+            const { error: legacyUpdateError } = await supabase
+              .from("grey_checking")
+              .update({
+                checking_method: payload.checking_method,
+                input_meters: payload.input_meters,
+                checked_meters: payload.checked_meters,
+                jodis: payload.jodis,
+                taggas: payload.taggas,
+                tp: payload.tp,
+                fold: payload.fold,
+                less_short: payload.less_short,
+              })
+              .eq("id", recordId);
+            if (legacyUpdateError) throw legacyUpdateError;
+          } else {
+            throw updateError;
+          }
+        }
       } else {
         const { data: inserted, error: insertError } = await supabase
           .from("grey_checking")
           .insert(payload)
           .select("id")
           .single();
-        if (insertError) throw insertError;
-        setRecordId(inserted.id);
+        if (insertError) {
+          const message = insertError.message || "";
+          const missingCols = message.includes("checker_name") || message.includes("border");
+          if (missingCols) {
+            const legacyPayload = {
+              lot_id: payload.lot_id,
+              checking_method: payload.checking_method,
+              input_meters: payload.input_meters,
+              checked_meters: payload.checked_meters,
+              jodis: payload.jodis,
+              taggas: payload.taggas,
+              tp: payload.tp,
+              fold: payload.fold,
+              less_short: payload.less_short,
+              created_by: payload.created_by,
+            };
+            const { data: legacyInserted, error: legacyInsertError } = await supabase
+              .from("grey_checking")
+              .insert(legacyPayload)
+              .select("id")
+              .single();
+            if (legacyInsertError) throw legacyInsertError;
+            setRecordId(legacyInserted.id);
+          } else {
+            throw insertError;
+          }
+        } else {
+          setRecordId(inserted.id);
+        }
       }
 
       setSuccess("Checking data saved. You can edit until you send to next stage.");
@@ -231,12 +424,12 @@ const CheckingStagePanel = ({ userId }) => {
     return (
       <div className="glass-card p-4 sm:p-6">
         <div className="flex items-center justify-between gap-2 mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">Checking Dashboard</h2>
+          <h2 className="text-xl surface-title">Checking Dashboard</h2>
           <button
             type="button"
             onClick={loadList}
             disabled={loading}
-            className="px-3 py-1.5 rounded-lg bg-gray-100 border border-gray-300 text-sm disabled:opacity-60"
+            className="btn-secondary btn-sm disabled:opacity-60"
           >
             {loading ? "Refreshing..." : "Refresh"}
           </button>
@@ -244,16 +437,26 @@ const CheckingStagePanel = ({ userId }) => {
 
         {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
 
+        <div className="mb-3 flex justify-start">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search (e.g. lot:120, party:ram, qty:500)"
+            className="w-full sm:max-w-md px-3 py-2 rounded-xl glass-input outline-none text-sm"
+          />
+        </div>
+
         {loading ? (
           <p className="text-sm text-gray-600">Loading lots in checking stage...</p>
-        ) : rows.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <p className="text-sm text-gray-600">No lots are currently in checking stage.</p>
         ) : (
           <div className="space-y-3">
-            {rows.map((lot) => {
+            {filteredRows.map((lot) => {
               const inward = Array.isArray(lot.grey_inward) ? lot.grey_inward[0] : lot.grey_inward;
               return (
-                <div key={lot.id} className="rounded-lg border border-gray-200 p-3 text-sm">
+                <div key={lot.id} className="rounded-xl border border-slate-200/80 bg-white/70 p-3 text-sm shadow-sm">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-semibold text-gray-900">Lot #{lot.lot_no}</p>
                     <button
@@ -262,7 +465,7 @@ const CheckingStagePanel = ({ userId }) => {
                         setSelectedLotId(lot.id);
                         loadLot(lot.id);
                       }}
-                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-gray-800 to-gray-900 text-white text-xs font-semibold shadow"
+                      className="btn-dark btn-sm"
                     >
                       Open
                     </button>
@@ -270,7 +473,13 @@ const CheckingStagePanel = ({ userId }) => {
                   <p>Party: {lot.party?.name || "-"}</p>
                   <p>Grey Party: {lot.grey_party?.name || "-"}</p>
                   <p>Cloth: {lot.cloth_type || "-"}</p>
-                  <p>Input Meters: {inward?.meters ?? "-"}</p>
+                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                    <p className="rounded-md bg-gray-50 px-2 py-1">Meters: {inward?.meters ?? "-"}</p>
+                    <p className="rounded-md bg-gray-50 px-2 py-1">Jodis: {inward?.jodis ?? "-"}</p>
+                    <p className="rounded-md bg-gray-50 px-2 py-1">Length: {inward?.length ?? "-"}</p>
+                    <p className="rounded-md bg-gray-50 px-2 py-1">Width: {inward?.width ?? "-"}</p>
+                    <p className="rounded-md bg-gray-50 px-2 py-1">Qty: {inward?.quantity || "-"}</p>
+                  </div>
                 </div>
               );
             })}
@@ -279,8 +488,6 @@ const CheckingStagePanel = ({ userId }) => {
       </div>
     );
   }
-
-  const inward = Array.isArray(lotData?.grey_inward) ? lotData.grey_inward[0] : lotData?.grey_inward;
 
   return (
     <div className="space-y-3">
@@ -296,25 +503,30 @@ const CheckingStagePanel = ({ userId }) => {
           setError("");
           setSuccess("");
         }}
-        className="px-4 py-2 rounded-xl bg-white/80 border border-gray-300 text-sm"
+        className="btn-secondary"
       >
         Back To Checking Dashboard
       </button>
 
       <div className="glass-card p-4 sm:p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Checking Entry</h2>
+        <h2 className="text-xl surface-title mb-2">Checking Entry</h2>
         <p className="text-sm text-gray-600 mb-4">
           Lot No: <span className="font-semibold">{lotData?.lot_no || "-"}</span>
         </p>
 
-        <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm space-y-1">
+        <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm space-y-2">
           <p className="font-semibold text-blue-900">Auto-fetched from Grey Inward</p>
           <p>Party: <span className="font-medium">{lotData?.party?.name || "-"}</span></p>
           <p>Grey Party: <span className="font-medium">{lotData?.grey_party?.name || "-"}</span></p>
           <p>Cloth Type: <span className="font-medium">{lotData?.cloth_type || "-"}</span></p>
-          <p>Meters: <span className="font-medium">{inward?.meters ?? "-"}</span></p>
-          <p>Jodis: <span className="font-medium">{inward?.jodis ?? "-"}</span></p>
-          <p>Tagge: <span className="font-medium">{inward?.tagge ?? "-"}</span></p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+            <p className="rounded-md bg-white/70 px-2 py-1">Meters: <span className="font-medium">{inward?.meters ?? "-"}</span></p>
+            <p className="rounded-md bg-white/70 px-2 py-1">Jodis: <span className="font-medium">{inward?.jodis ?? "-"}</span></p>
+            <p className="rounded-md bg-white/70 px-2 py-1">Length: <span className="font-medium">{inward?.length ?? "-"}</span></p>
+            <p className="rounded-md bg-white/70 px-2 py-1">Width: <span className="font-medium">{inward?.width ?? "-"}</span></p>
+            <p className="rounded-md bg-white/70 px-2 py-1">Quantity: <span className="font-medium">{inward?.quantity || "-"}</span></p>
+            <p className="rounded-md bg-white/70 px-2 py-1">Tagge: <span className="font-medium">{inward?.tagge ?? "-"}</span></p>
+          </div>
           <p>Fold Details: <span className="font-medium">{inward?.fold_details || "-"}</span></p>
           <p>Border: <span className="font-medium">{inward?.border || "-"}</span></p>
         </div>
@@ -337,6 +549,25 @@ const CheckingStagePanel = ({ userId }) => {
                 <option key={opt} value={opt}>{opt}</option>
               ))}
             </select>
+          </label>
+
+          <label className="text-sm">
+            <span className="block mb-1 text-gray-700">Checker Name</span>
+            <input
+              type="text"
+              list="checker-name-suggestions"
+              value={form.checker_name}
+              onChange={(e) => {
+                setField("checker_name", e.target.value);
+                searchCheckerNames(e.target.value);
+              }}
+              onFocus={() => searchCheckerNames("")}
+              className="w-full px-3 py-2 rounded-xl glass-input outline-none"
+              disabled={recordLocked || sending}
+            />
+            <datalist id="checker-name-suggestions">
+              {checkerNameSuggestions.map((name) => <option key={name} value={name} />)}
+            </datalist>
           </label>
 
           <label className="text-sm">
@@ -366,6 +597,7 @@ const CheckingStagePanel = ({ userId }) => {
             <span className="block mb-1 text-gray-700">Jodis</span>
             <input
               type="number"
+              step="0.01"
               value={form.jodis}
               onChange={(e) => setField("jodis", e.target.value)}
               className="w-full px-3 py-2 rounded-xl glass-input outline-none"
@@ -407,12 +639,34 @@ const CheckingStagePanel = ({ userId }) => {
           </label>
 
           <label className="text-sm">
+            <span className="block mb-1 text-gray-700">Border</span>
+            <input
+              type="text"
+              list="checking-border-suggestions"
+              value={form.border}
+              onChange={(e) => {
+                setField("border", e.target.value);
+                searchBorderSuggestions(e.target.value);
+              }}
+              onFocus={() => searchBorderSuggestions("")}
+              className="w-full px-3 py-2 rounded-xl glass-input outline-none"
+              disabled={recordLocked || sending}
+            />
+            <datalist id="checking-border-suggestions">
+              {borderSuggestions.map((value) => <option key={value} value={value} />)}
+            </datalist>
+          </label>
+
+          <label className="text-sm">
             <span className="block mb-1 text-gray-700">Less / Short</span>
             <input
               type="number"
               step="0.01"
               value={form.less_short}
-              onChange={(e) => setField("less_short", e.target.value)}
+              onChange={(e) => {
+                setLessShortEdited(true);
+                setField("less_short", e.target.value);
+              }}
               className="w-full px-3 py-2 rounded-xl glass-input outline-none"
               disabled={recordLocked || sending}
             />
@@ -422,7 +676,7 @@ const CheckingStagePanel = ({ userId }) => {
             <button
               type="submit"
               disabled={saving || recordLocked || sending}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
+              className="btn-primary disabled:opacity-60"
             >
               {saving ? "Saving..." : "Save"}
             </button>
@@ -430,7 +684,7 @@ const CheckingStagePanel = ({ userId }) => {
               type="button"
               onClick={sendToNextStage}
               disabled={sending || recordLocked || !selectedLotId}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-gray-800 to-gray-900 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
+              className="btn-dark disabled:opacity-60"
             >
               {sending ? "Sending..." : "Send To Next Stage"}
             </button>
@@ -442,4 +696,3 @@ const CheckingStagePanel = ({ userId }) => {
 };
 
 export default CheckingStagePanel;
-

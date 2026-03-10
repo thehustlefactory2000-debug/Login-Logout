@@ -4,19 +4,33 @@ import { supabase } from "../../lib/supabaseClient";
 const CLOTH_TYPE_PRESETS = ["Cotton", "PC", "Dinear", "Roto"];
 const OTHER_CLOTH = "__other__";
 
+const calculateMeters = (jodisValue, lengthValue) => {
+  const parsedJodis = Number(jodisValue);
+  const parsedLength = Number(lengthValue);
+  if (!Number.isFinite(parsedJodis) || !Number.isFinite(parsedLength)) return "";
+  return (Math.round(parsedJodis * parsedLength * 100) / 100).toFixed(2);
+};
+
 const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) => {
+  const todayIso = new Date().toISOString().slice(0, 10);
   const [partyName, setPartyName] = useState("");
   const [greyPartyName, setGreyPartyName] = useState("");
   const [clothType, setClothType] = useState("");
+  const [entryDate, setEntryDate] = useState(todayIso);
   const [selectedClothType, setSelectedClothType] = useState("");
   const [meters, setMeters] = useState("");
   const [jodis, setJodis] = useState("");
+  const [length, setLength] = useState("");
+  const [width, setWidth] = useState("");
+  const [quantity, setQuantity] = useState("");
   const [tagge, setTagge] = useState("");
   const [foldDetails, setFoldDetails] = useState("");
   const [border, setBorder] = useState("");
 
   const [partySuggestions, setPartySuggestions] = useState([]);
   const [greyPartySuggestions, setGreyPartySuggestions] = useState([]);
+  const [qualitySuggestions, setQualitySuggestions] = useState([]);
+  const [borderSuggestions, setBorderSuggestions] = useState([]);
   const [clothTypeOptions, setClothTypeOptions] = useState([]);
 
   const [saving, setSaving] = useState(false);
@@ -27,17 +41,6 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
   const [currentLotId, setCurrentLotId] = useState(null);
   const [currentLotNo, setCurrentLotNo] = useState(null);
   const [isLocked, setIsLocked] = useState(false);
-  const [nextLotPreview, setNextLotPreview] = useState(null);
-
-  const loadNextLotPreview = async () => {
-    const { data } = await supabase
-      .from("lots")
-      .select("lot_no")
-      .order("lot_no", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    setNextLotPreview((data?.lot_no || 0) + 1);
-  };
 
   const loadClothTypes = async () => {
     const { data } = await supabase
@@ -52,7 +55,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
   const loadLotForEdit = async (lotId) => {
     const { data: lot, error: lotError } = await supabase
       .from("lots")
-      .select("id, lot_no, cloth_type, party:party_id(name), grey_party:grey_party_id(name)")
+      .select("id, lot_no, cloth_type, entry_date, party:party_id(name), grey_party:grey_party_id(name)")
       .eq("id", lotId)
       .single();
 
@@ -60,7 +63,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 
     const { data: inward, error: inwardError } = await supabase
       .from("grey_inward")
-      .select("id, meters, jodis, tagge, fold_details, border, is_locked")
+      .select("id, entry_date, meters, jodis, length, width, quantity, tagge, fold_details, border, is_locked")
       .eq("lot_id", lotId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -72,6 +75,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
     setCurrentLotNo(lot.lot_no);
     setPartyName(lot.party?.name || "");
     setGreyPartyName(lot.grey_party?.name || "");
+    setEntryDate(lot.entry_date || inward?.entry_date || todayIso);
 
     const lotClothType = lot.cloth_type || "";
     if (lotClothType) {
@@ -85,6 +89,9 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 
     setMeters(inward?.meters ?? "");
     setJodis(inward?.jodis ?? "");
+    setLength(inward?.length ?? "");
+    setWidth(inward?.width ?? "");
+    setQuantity(inward?.quantity ?? "");
     setTagge(inward?.tagge ?? "");
     setFoldDetails(inward?.fold_details ?? "");
     setBorder(inward?.border ?? "");
@@ -92,7 +99,6 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
   };
 
   useEffect(() => {
-    loadNextLotPreview();
     loadClothTypes();
   }, []);
 
@@ -112,6 +118,13 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
     load();
   }, [initialLotId]);
 
+  useEffect(() => {
+    if (jodis === "" || length === "") return;
+    const calculatedMeters = calculateMeters(jodis, length);
+    if (!calculatedMeters) return;
+    setMeters(calculatedMeters);
+  }, [jodis, length]);
+
   const searchParty = async (value, type, setter) => {
     let query = supabase
       .from("parties")
@@ -123,6 +136,34 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
     if (value.trim()) query = query.ilike("name", `%${value.trim()}%`);
     const { data } = await query;
     setter((data || []).map((p) => p.name));
+  };
+
+  const searchQuality = async (value) => {
+    let query = supabase
+      .from("grey_inward")
+      .select("quantity")
+      .not("quantity", "is", null)
+      .order("quantity", { ascending: true })
+      .limit(20);
+
+    if (value.trim()) query = query.ilike("quantity", `%${value.trim()}%`);
+    const { data } = await query;
+    const uniqueValues = [...new Set((data || []).map((row) => row.quantity).filter(Boolean))];
+    setQualitySuggestions(uniqueValues.slice(0, 8));
+  };
+
+  const searchBorder = async (value) => {
+    let query = supabase
+      .from("grey_inward")
+      .select("border")
+      .not("border", "is", null)
+      .order("border", { ascending: true })
+      .limit(20);
+
+    if (value.trim()) query = query.ilike("border", `%${value.trim()}%`);
+    const { data } = await query;
+    const uniqueValues = [...new Set((data || []).map((row) => row.border).filter(Boolean))];
+    setBorderSuggestions(uniqueValues.slice(0, 8));
   };
 
   const findOrCreateParty = async (name, type) => {
@@ -179,9 +220,13 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
     setPartyName("");
     setGreyPartyName("");
     setClothType("");
+    setEntryDate(todayIso);
     setSelectedClothType("");
     setMeters("");
     setJodis("");
+    setLength("");
+    setWidth("");
+    setQuantity("");
     setTagge("");
     setFoldDetails("");
     setBorder("");
@@ -194,7 +239,6 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
     setIsLocked(false);
     setError("");
     setSuccess("");
-    await loadNextLotPreview();
   };
 
   const saveGreyInward = async (e) => {
@@ -209,6 +253,10 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
       setError("Party name, grey party name, and cloth type are required.");
       return;
     }
+    if ((jodis !== "" && length === "") || (length !== "" && jodis === "")) {
+      setError("Enter both Jodis and Length to calculate meters.");
+      return;
+    }
     if (isLocked) {
       setError("This lot is already sent to checking. Start a new lot.");
       return;
@@ -216,6 +264,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 
     setSaving(true);
     try {
+      const calculatedMeters = calculateMeters(jodis, length);
       const partyId = await findOrCreateParty(partyName, "party");
       const greyPartyId = await findOrCreateParty(greyPartyName, "grey_party");
       const savedClothType = await findOrCreateClothType(resolvedClothType);
@@ -230,6 +279,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
             party_id: partyId,
             grey_party_id: greyPartyId,
             cloth_type: savedClothType,
+            entry_date: entryDate,
             created_by: userId,
           })
           .select("id, lot_no")
@@ -244,6 +294,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
             party_id: partyId,
             grey_party_id: greyPartyId,
             cloth_type: savedClothType,
+            entry_date: entryDate,
           })
           .eq("id", lotId);
         if (lotUpdateError) throw lotUpdateError;
@@ -251,8 +302,12 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 
       const payload = {
         lot_id: lotId,
-        meters: meters === "" ? null : Number(meters),
+        entry_date: entryDate,
+        meters: calculatedMeters === "" ? (meters === "" ? null : Number(meters)) : Number(calculatedMeters),
         jodis: jodis === "" ? null : Number(jodis),
+        length: length === "" ? null : Number(length),
+        width: width === "" ? null : Number(width),
+        quantity: quantity.trim() || null,
         tagge: tagge === "" ? null : Number(tagge),
         fold_details: foldDetails.trim() || null,
         border: border.trim() || null,
@@ -276,8 +331,12 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
         const { error: inwardUpdateError } = await supabase
           .from("grey_inward")
           .update({
+            entry_date: payload.entry_date,
             meters: payload.meters,
             jodis: payload.jodis,
+            length: payload.length,
+            width: payload.width,
+            quantity: payload.quantity,
             tagge: payload.tagge,
             fold_details: payload.fold_details,
             border: payload.border,
@@ -332,9 +391,9 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 
   return (
     <div className="glass-card p-4 sm:p-6">
-      <h2 className="text-xl font-semibold text-gray-900 mb-2">Grey Inward Entry</h2>
+      <h2 className="text-xl surface-title mb-2">Grey Inward Entry</h2>
       <p className="text-sm text-gray-600 mb-4">
-        Lot No: <span className="font-semibold">{currentLotNo ?? nextLotPreview ?? "-"}</span>
+        Lot No: <span className="font-semibold">{currentLotNo ?? "Will generate on save"}</span>
       </p>
 
       {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
@@ -380,6 +439,18 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
         </label>
 
         <label className="text-sm">
+          <span className="block mb-1 text-gray-700">Entry Date</span>
+          <input
+            type="date"
+            value={entryDate}
+            onChange={(e) => setEntryDate(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl glass-input outline-none"
+            required
+            disabled={disabled}
+          />
+        </label>
+
+        <label className="text-sm">
           <span className="block mb-1 text-gray-700">Cloth Type</span>
           <select
             value={selectedClothType}
@@ -412,15 +483,51 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
           <div className="hidden sm:block" aria-hidden="true" />
         )}
 
-        <label className="text-sm">
-          <span className="block mb-1 text-gray-700">Meters</span>
-          <input type="number" step="0.01" value={meters} onChange={(e) => setMeters(e.target.value)} className="w-full px-3 py-2 rounded-xl glass-input outline-none" disabled={disabled} />
-        </label>
+        <div className="sm:col-span-2 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 p-3">
+          <p className="text-xs uppercase tracking-wide text-blue-700 font-semibold mb-2">Measurement Details</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <label className="text-sm">
+              <span className="block mb-1 text-gray-700">Jodis</span>
+              <input type="number" min="0" step="0.01" value={jodis} onChange={(e) => setJodis(e.target.value)} className="w-full px-3 py-2 rounded-xl glass-input outline-none" disabled={disabled} />
+            </label>
 
-        <label className="text-sm">
-          <span className="block mb-1 text-gray-700">Jodis</span>
-          <input type="number" value={jodis} onChange={(e) => setJodis(e.target.value)} className="w-full px-3 py-2 rounded-xl glass-input outline-none" disabled={disabled} />
-        </label>
+            <label className="text-sm">
+              <span className="block mb-1 text-gray-700">Length</span>
+              <input type="number" min="0" step="0.01" value={length} onChange={(e) => setLength(e.target.value)} className="w-full px-3 py-2 rounded-xl glass-input outline-none" disabled={disabled} />
+            </label>
+
+            <label className="text-sm">
+              <span className="block mb-1 text-gray-700">Width</span>
+              <input type="number" min="0" step="0.01" value={width} onChange={(e) => setWidth(e.target.value)} className="w-full px-3 py-2 rounded-xl glass-input outline-none" disabled={disabled} />
+            </label>
+
+            <label className="text-sm">
+              <span className="block mb-1 text-gray-700">Quality</span>
+              <input
+                type="text"
+                list="quality-suggestions"
+                value={quantity}
+                onChange={(e) => {
+                  setQuantity(e.target.value);
+                  searchQuality(e.target.value);
+                }}
+                onFocus={() => searchQuality("")}
+                placeholder="Type quality (e.g. A1, Export, Premium)"
+                className="w-full px-3 py-2 rounded-xl glass-input outline-none"
+                disabled={disabled}
+              />
+              <datalist id="quality-suggestions">
+                {qualitySuggestions.map((quality) => <option key={quality} value={quality} />)}
+              </datalist>
+            </label>
+
+            <label className="text-sm">
+              <span className="block mb-1 text-gray-700">Meters</span>
+              <input type="number" step="0.01" value={meters} className="w-full px-3 py-2 rounded-xl glass-input outline-none bg-white/90" disabled={disabled} readOnly />
+              <span className="block mt-1 text-xs text-gray-500">Auto = Jodis x Length</span>
+            </label>
+          </div>
+        </div>
 
         <label className="text-sm">
           <span className="block mb-1 text-gray-700">Tagge</span>
@@ -434,18 +541,32 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 
         <label className="text-sm sm:col-span-2">
           <span className="block mb-1 text-gray-700">Border</span>
-          <input type="text" value={border} onChange={(e) => setBorder(e.target.value)} className="w-full px-3 py-2 rounded-xl glass-input outline-none" disabled={disabled} />
+          <input
+            type="text"
+            list="border-suggestions"
+            value={border}
+            onChange={(e) => {
+              setBorder(e.target.value);
+              searchBorder(e.target.value);
+            }}
+            onFocus={() => searchBorder("")}
+            className="w-full px-3 py-2 rounded-xl glass-input outline-none"
+            disabled={disabled}
+          />
+          <datalist id="border-suggestions">
+            {borderSuggestions.map((value) => <option key={value} value={value} />)}
+          </datalist>
         </label>
 
         <div className="sm:col-span-2 flex flex-col sm:flex-row gap-2">
-          <button type="submit" disabled={saving || disabled} className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold shadow-lg disabled:opacity-60">
+          <button type="submit" disabled={saving || disabled} className="btn-primary disabled:opacity-60">
             {saving ? "Saving..." : "Save"}
           </button>
-          <button type="button" onClick={sendToChecking} disabled={sending || !currentLotId || isLocked} className="px-4 py-2 rounded-xl bg-gradient-to-r from-gray-800 to-gray-900 text-white text-sm font-semibold shadow-lg disabled:opacity-60">
+          <button type="button" onClick={sendToChecking} disabled={sending || !currentLotId || isLocked} className="btn-dark disabled:opacity-60">
             {sending ? "Sending..." : "Send To Checking"}
           </button>
           {(isLocked || currentLotId) && (
-            <button type="button" onClick={startNewLot} className="px-4 py-2 rounded-xl bg-white/80 border border-gray-300 text-sm">
+            <button type="button" onClick={startNewLot} className="btn-secondary">
               Start New Lot
             </button>
           )}
@@ -456,4 +577,6 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 };
 
 export default GreyInwardEntryForm;
+
+
 

@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import { buildSearchIndex, filterIndexedRows } from "../../lib/stageSearch";
 
 const FINISHING_TYPE_OPTIONS = [
   { value: "cold_felt", label: "Cold Felt" },
@@ -15,6 +16,7 @@ const FinishingStagePanel = ({ userId }) => {
   const [recordId, setRecordId] = useState(null);
   const [recordLocked, setRecordLocked] = useState(false);
   const [finishingType, setFinishingType] = useState("");
+  const [search, setSearch] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -56,6 +58,24 @@ const FinishingStagePanel = ({ userId }) => {
       supabase.removeChannel(channel);
     };
   }, []);
+
+  const indexedRows = useMemo(
+    () =>
+      rows.map((lot) => {
+      const stenter = Array.isArray(lot.stenter) ? lot.stenter[0] : lot.stenter;
+        return {
+          row: lot,
+          index: buildSearchIndex({
+            lot: lot.lot_no,
+            stenter: stenter?.stenter_no,
+            meters: stenter?.stentered_meters,
+          }),
+        };
+      }),
+    [rows],
+  );
+
+  const filteredRows = useMemo(() => filterIndexedRows(indexedRows, search), [indexedRows, search]);
 
   const openLot = async (lotId) => {
     setLoading(true);
@@ -185,12 +205,12 @@ const FinishingStagePanel = ({ userId }) => {
     return (
       <div className="glass-card p-4 sm:p-6">
         <div className="flex items-center justify-between gap-2 mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">Finishing Dashboard</h2>
+          <h2 className="text-xl surface-title">Finishing Dashboard</h2>
           <button
             type="button"
             onClick={loadList}
             disabled={loading}
-            className="px-3 py-1.5 rounded-lg bg-gray-100 border border-gray-300 text-sm disabled:opacity-60"
+            className="btn-secondary btn-sm disabled:opacity-60"
           >
             {loading ? "Refreshing..." : "Refresh"}
           </button>
@@ -198,22 +218,32 @@ const FinishingStagePanel = ({ userId }) => {
 
         {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
 
+        <div className="mb-3">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search (e.g. lot:120, stenter:35, meters:490)"
+            className="w-full sm:max-w-md px-3 py-2 rounded-xl glass-input outline-none text-sm"
+          />
+        </div>
+
         {loading ? (
           <p className="text-sm text-gray-600">Loading lots in finishing stage...</p>
-        ) : rows.length === 0 ? (
+        ) : filteredRows.length === 0 ? (
           <p className="text-sm text-gray-600">No lots are currently in finishing stage.</p>
         ) : (
           <div className="space-y-3">
-            {rows.map((lot) => {
+            {filteredRows.map((lot) => {
               const stenter = Array.isArray(lot.stenter) ? lot.stenter[0] : lot.stenter;
               return (
-                <div key={lot.id} className="rounded-lg border border-gray-200 p-3 text-sm">
+                <div key={lot.id} className="rounded-xl border border-slate-200/80 bg-white/70 p-3 text-sm shadow-sm">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-semibold text-gray-900">Lot #{lot.lot_no}</p>
                     <button
                       type="button"
                       onClick={() => openLot(lot.id)}
-                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-gray-800 to-gray-900 text-white text-xs font-semibold shadow"
+                      className="btn-dark btn-sm"
                     >
                       Open
                     </button>
@@ -244,13 +274,13 @@ const FinishingStagePanel = ({ userId }) => {
           setError("");
           setSuccess("");
         }}
-        className="px-4 py-2 rounded-xl bg-white/80 border border-gray-300 text-sm"
+        className="btn-secondary"
       >
         Back To Finishing Dashboard
       </button>
 
       <div className="glass-card p-4 sm:p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Finishing Entry</h2>
+        <h2 className="text-xl surface-title mb-2">Finishing Entry</h2>
         <p className="text-sm text-gray-600 mb-4">Lot No: <span className="font-semibold">{lotData?.lot_no}</span></p>
 
         <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm">
@@ -282,7 +312,7 @@ const FinishingStagePanel = ({ userId }) => {
             <button
               type="submit"
               disabled={saving || recordLocked || sending}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
+              className="btn-primary disabled:opacity-60"
             >
               {saving ? "Saving..." : "Save"}
             </button>
@@ -290,7 +320,7 @@ const FinishingStagePanel = ({ userId }) => {
               type="button"
               onClick={sendToFolding}
               disabled={sending || recordLocked || !lotData?.id}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-gray-800 to-gray-900 text-white text-sm font-semibold shadow-lg disabled:opacity-60"
+              className="btn-dark disabled:opacity-60"
             >
               {sending ? "Sending..." : "Send To Folding Stage"}
             </button>
@@ -302,4 +332,8 @@ const FinishingStagePanel = ({ userId }) => {
 };
 
 export default FinishingStagePanel;
+
+
+
+
 

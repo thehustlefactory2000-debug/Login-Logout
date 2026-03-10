@@ -26,6 +26,9 @@ export const STAGE_FORM_CONFIG = {
     fields: [
       { key: "meters", label: "Meters", type: "number" },
       { key: "jodis", label: "Jodis", type: "number" },
+      { key: "length", label: "Length", type: "number" },
+      { key: "width", label: "Width", type: "number" },
+      { key: "quantity", label: "Quantity", type: "text" },
       { key: "tagge", label: "Tagge", type: "number" },
       { key: "fold_details", label: "Fold Details", type: "text" },
       { key: "border", label: "Border", type: "text" },

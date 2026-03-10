@@ -60,7 +60,7 @@ const SignUp = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md animate-slide-up">
         <div className="glass-card p-8 sm:p-10">
           {/* Header */}
@@ -112,7 +112,7 @@ const SignUp = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="********"
                 className="w-full px-4 py-3 rounded-xl glass-input outline-none transition-all duration-300"
                 required
               />
@@ -126,7 +126,7 @@ const SignUp = () => {
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder="********"
                 className="w-full px-4 py-3 rounded-xl glass-input outline-none transition-all duration-300"
                 required
               />
@@ -135,7 +135,7 @@ const SignUp = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
+              className="w-full py-3.5 px-4 btn-primary disabled:opacity-70 disabled:cursor-not-allowed disabled:transform-none"
             >
               {loading ? (
                 <span className="flex items-center justify-center">
@@ -167,3 +167,4 @@ const SignUp = () => {
 };
 
 export default SignUp;
+

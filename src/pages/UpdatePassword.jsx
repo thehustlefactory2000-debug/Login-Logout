@@ -42,7 +42,7 @@ const UpdatePassword = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4 py-10">
+    <div className="min-h-screen flex items-center justify-center px-4 py-10">
       <div className="w-full max-w-md animate-slide-up">
         <div className="glass-card p-8 sm:p-10">
           <div className="text-center mb-8">
@@ -91,7 +91,7 @@ const UpdatePassword = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full py-3.5 px-4 btn-primary disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {loading ? "Updating..." : "Update Password"}
             </button>

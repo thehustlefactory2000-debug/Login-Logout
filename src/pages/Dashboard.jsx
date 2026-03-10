@@ -21,6 +21,8 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (!user?.id || profile?.id) return;
+
     const loadProfile = async () => {
       try {
         await refreshProfile();
@@ -30,19 +32,23 @@ const Dashboard = () => {
     };
 
     loadProfile();
-  }, [refreshProfile]);
+  }, [profile?.id, refreshProfile, user?.id]);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate("/signin");
+    const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+    if (signOutError) {
+      setError(signOutError.message || "Failed to sign out.");
+      return;
+    }
+    navigate("/signin", { replace: true });
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 px-4 py-6 sm:px-6">
+    <div className="app-container space-y-4">
       <div className="max-w-5xl mx-auto space-y-4">
         <div className="glass-card p-4 sm:p-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">Staff Dashboard</h1>
-          <p className="text-gray-600">Welcome, {profile?.name || profile?.email || "Staff"}.</p>
+          <h1 className="text-2xl font-bold surface-title mb-1">Staff Dashboard</h1>
+          <p className="surface-subtitle">Welcome, {profile?.name || profile?.email || "Staff"}.</p>
 
           {error && <p className="text-red-600 mt-2">{error}</p>}
           {!error && (
@@ -57,7 +63,7 @@ const Dashboard = () => {
           <div className="mt-4">
             <button
               onClick={handleSignOut}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-gray-800 to-gray-900 text-white text-sm font-semibold shadow-lg"
+              className="btn-secondary"
             >
               Sign Out
             </button>
@@ -82,7 +88,7 @@ const Dashboard = () => {
             <button
               type="button"
               onClick={() => setGreyInwardMode("list")}
-              className="px-4 py-2 rounded-xl bg-white/80 border border-gray-300 text-sm"
+              className="btn-secondary"
             >
               Back To Grey Inward Dashboard
             </button>
