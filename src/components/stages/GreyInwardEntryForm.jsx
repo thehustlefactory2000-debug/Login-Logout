@@ -40,6 +40,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 
   const [currentLotId, setCurrentLotId] = useState(null);
   const [currentLotNo, setCurrentLotNo] = useState(null);
+  const [nextLotNo, setNextLotNo] = useState(null);
   const [isLocked, setIsLocked] = useState(false);
 
   const loadClothTypes = async () => {
@@ -50,6 +51,18 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 
     const dbTypes = (data || []).map((d) => d.name);
     setClothTypeOptions([...new Set([...CLOTH_TYPE_PRESETS, ...dbTypes])]);
+  };
+
+  const loadNextLotNo = async () => {
+    const { data, error: lotError } = await supabase
+      .from("lots")
+      .select("lot_no")
+      .order("lot_no", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (lotError) throw lotError;
+    setNextLotNo((data?.lot_no ?? 0) + 1);
   };
 
   const loadLotForEdit = async (lotId) => {
@@ -99,8 +112,27 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
   };
 
   useEffect(() => {
-    loadClothTypes();
-  }, []);
+    const loadInitialData = async () => {
+      try {
+        await Promise.all([loadClothTypes(), loadNextLotNo()]);
+      } catch (err) {
+        setError(err.message || "Failed to load grey inward form.");
+      }
+    };
+
+    loadInitialData();
+
+    const channel = supabase
+      .channel("realtime-grey-inward-lot-no")
+      .on("postgres_changes", { event: "*", schema: "public", table: "lots" }, () => {
+        if (!currentLotId) loadNextLotNo().catch(() => {});
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentLotId]);
 
   useEffect(() => {
     if (!initialLotId) return;
@@ -239,6 +271,11 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
     setIsLocked(false);
     setError("");
     setSuccess("");
+    try {
+      await loadNextLotNo();
+    } catch (err) {
+      setError(err.message || "Failed to load next lot number.");
+    }
   };
 
   const saveGreyInward = async (e) => {
@@ -352,6 +389,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 
       setCurrentLotId(lotId);
       setCurrentLotNo(lotNo);
+      setNextLotNo((lotNo ?? 0) + 1);
       setSuccess(`Saved. Lot No: ${lotNo}. You can edit and save again until you send to checking.`);
       await loadClothTypes();
       if (onSaved) onSaved();
@@ -393,7 +431,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
     <div className="glass-card p-4 sm:p-6">
       <h2 className="text-xl surface-title mb-2">Grey Inward Entry</h2>
       <p className="text-sm text-gray-600 mb-4">
-        Lot No: <span className="font-semibold">{currentLotNo ?? "Will generate on save"}</span>
+        Lot No: <span className="font-semibold">{currentLotNo ?? nextLotNo ?? "Loading..."}</span>
       </p>
 
       {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}

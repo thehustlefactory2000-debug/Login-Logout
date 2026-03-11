@@ -23,7 +23,7 @@ const DyeingStagePanel = ({ userId }) => {
     try {
       const { data, error: listError } = await supabase
         .from("lots")
-        .select("id, lot_no, grey_checking!inner(checked_meters), bleaching!inner(bleach_group_no)")
+        .select("id, lot_no, grey_checking!inner(checked_meters, jodis), bleaching!inner(bleach_group_no)")
         .eq("current_stage", "dyeing")
         .eq("status", "active")
         .order("lot_no", { ascending: false });
@@ -62,6 +62,7 @@ const DyeingStagePanel = ({ userId }) => {
           index: buildSearchIndex({
             lot: lot.lot_no,
             checked: checking?.checked_meters,
+            jodis: checking?.jodis,
             bleached: bleaching?.bleach_group_no,
           }),
         };
@@ -78,7 +79,7 @@ const DyeingStagePanel = ({ userId }) => {
     try {
       const { data: lot, error: lotError } = await supabase
         .from("lots")
-        .select("id, lot_no, current_stage, status, grey_checking!inner(checked_meters), bleaching!inner(bleach_group_no)")
+        .select("id, lot_no, current_stage, status, grey_checking!inner(checked_meters, jodis), bleaching!inner(bleach_group_no)")
         .eq("id", lotId)
         .single();
       if (lotError) throw lotError;
@@ -218,7 +219,7 @@ const DyeingStagePanel = ({ userId }) => {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search (e.g. lot:120, checked:520, bleached:78)"
+            placeholder="Search (e.g. lot:120, checked:520, jodis:18, bleached:78)"
             className="w-full sm:max-w-md px-3 py-2 rounded-xl glass-input outline-none text-sm"
           />
         </div>
@@ -245,6 +246,7 @@ const DyeingStagePanel = ({ userId }) => {
                     </button>
                   </div>
                   <p>Checked Meters: {checking?.checked_meters ?? "-"}</p>
+                  <p>Checked Jodis: {checking?.jodis ?? "-"}</p>
                   <p>Bleached No: {bleaching?.bleach_group_no ?? "-"}</p>
                 </div>
               );
@@ -283,6 +285,7 @@ const DyeingStagePanel = ({ userId }) => {
 
         <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm">
           <p>Checked Meters: <span className="font-medium">{checking?.checked_meters ?? "-"}</span></p>
+          <p>Checked Jodis: <span className="font-medium">{checking?.jodis ?? "-"}</span></p>
         </div>
 
         {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}

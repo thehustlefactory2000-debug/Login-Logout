@@ -32,13 +32,15 @@ const emptyForm = {
   checking_method: "",
   checker_name: "",
   input_meters: "",
+  input_jodis: "",
   checked_meters: "",
-  jodis: "",
+  checked_jodis: "",
   taggas: "",
   tp: "",
   fold: "",
   border: "",
-  less_short: "",
+  less_short_meters: "",
+  less_short_jodis: "",
 };
 
 const CheckingStagePanel = ({ userId }) => {
@@ -52,7 +54,8 @@ const CheckingStagePanel = ({ userId }) => {
   const [search, setSearch] = useState("");
   const [checkerNameSuggestions, setCheckerNameSuggestions] = useState([]);
   const [borderSuggestions, setBorderSuggestions] = useState([]);
-  const [lessShortEdited, setLessShortEdited] = useState(false);
+  const [lessShortMetersEdited, setLessShortMetersEdited] = useState(false);
+  const [lessShortJodisEdited, setLessShortJodisEdited] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -106,7 +109,7 @@ const CheckingStagePanel = ({ userId }) => {
       let existing = null;
       const { data: withNewCols, error: checkingError } = await supabase
         .from("grey_checking")
-        .select("id, checking_method, checker_name, input_meters, checked_meters, jodis, taggas, tp, fold, border, less_short, is_locked")
+        .select("id, checking_method, checker_name, input_meters, checked_meters, jodis, taggas, tp, fold, border, less_short, less_short_meters, less_short_jodis, less_short_meters_manual, less_short_jodis_manual, is_locked")
         .eq("lot_id", lotId)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -114,7 +117,13 @@ const CheckingStagePanel = ({ userId }) => {
 
       if (checkingError) {
         const message = checkingError.message || "";
-        const missingCheckerCols = message.includes("checker_name") || message.includes("border");
+        const missingCheckerCols =
+          message.includes("checker_name") ||
+          message.includes("border") ||
+          message.includes("less_short_meters") ||
+          message.includes("less_short_jodis") ||
+          message.includes("less_short_meters_manual") ||
+          message.includes("less_short_jodis_manual");
         if (missingCheckerCols) {
           const { data: legacy, error: legacyError } = await supabase
             .from("grey_checking")
@@ -135,26 +144,37 @@ const CheckingStagePanel = ({ userId }) => {
       setLotData(lot);
       setRecordId(existing?.id || null);
       setRecordLocked(Boolean(existing?.is_locked));
-      setLessShortEdited(false);
-      const initialJodis = existing?.jodis ?? inward.jodis ?? "";
-      const calculatedLessShort = (() => {
+      const hasSplitLessShort =
+        existing?.less_short_meters !== undefined || existing?.less_short_jodis !== undefined;
+      const checkedJodis = existing?.jodis ?? "";
+      const calculatedLessShortMeters = (() => {
+        const inwardMeters = Number(inward?.meters ?? "");
+        const savedCheckedMeters = Number(existing?.checked_meters ?? "");
+        if (!Number.isFinite(inwardMeters) || !Number.isFinite(savedCheckedMeters)) return "";
+        return Math.max(inwardMeters - savedCheckedMeters, 0);
+      })();
+      const calculatedLessShortJodis = (() => {
         const inwardJodis = Number(inward?.jodis ?? "");
-        const checkedJodis = Number(initialJodis);
-        if (!Number.isFinite(inwardJodis) || !Number.isFinite(checkedJodis)) return "";
-        return Math.max(inwardJodis - checkedJodis, 0);
+        const savedCheckedJodis = Number(checkedJodis);
+        if (!Number.isFinite(inwardJodis) || !Number.isFinite(savedCheckedJodis)) return "";
+        return Math.max(inwardJodis - savedCheckedJodis, 0);
       })();
 
+      setLessShortMetersEdited(Boolean(existing?.less_short_meters_manual));
+      setLessShortJodisEdited(Boolean(existing?.less_short_jodis_manual) || (!hasSplitLessShort && existing?.less_short != null));
       setForm({
         checking_method: DB_TO_CHECKING_METHOD[existing?.checking_method] || "",
         checker_name: existing?.checker_name || "",
         input_meters: existing?.input_meters ?? inward.meters ?? "",
+        input_jodis: inward.jodis ?? "",
         checked_meters: existing?.checked_meters ?? "",
-        jodis: initialJodis,
+        checked_jodis: checkedJodis,
         taggas: existing?.taggas ?? inward.tagge ?? "",
         tp: existing?.tp || "",
         fold: existing?.fold ?? inward.fold_details ?? "",
         border: existing?.border ?? inward.border ?? "",
-        less_short: existing?.less_short ?? calculatedLessShort,
+        less_short_meters: existing?.less_short_meters ?? calculatedLessShortMeters,
+        less_short_jodis: existing?.less_short_jodis ?? existing?.less_short ?? calculatedLessShortJodis,
       });
       setMode("form");
     } catch (e) {
@@ -212,18 +232,33 @@ const CheckingStagePanel = ({ userId }) => {
     return Array.isArray(lotData.grey_inward) ? lotData.grey_inward[0] : lotData.grey_inward;
   }, [lotData]);
 
-  const calculatedLessShort = useMemo(() => {
+  const calculatedLessShortMeters = useMemo(() => {
+    const inwardMeters = Number(inward?.meters ?? "");
+    const checkedMeters = Number(form.checked_meters ?? "");
+    if (!Number.isFinite(inwardMeters) || !Number.isFinite(checkedMeters)) return "";
+    return Math.max(inwardMeters - checkedMeters, 0);
+  }, [inward, form.checked_meters]);
+
+  const calculatedLessShortJodis = useMemo(() => {
     const inwardJodis = Number(inward?.jodis ?? "");
-    const checkedJodis = Number(form.jodis ?? "");
+    const checkedJodis = Number(form.checked_jodis ?? "");
     if (!Number.isFinite(inwardJodis) || !Number.isFinite(checkedJodis)) return "";
     return Math.max(inwardJodis - checkedJodis, 0);
-  }, [inward, form.jodis]);
+  }, [inward, form.checked_jodis]);
 
   useEffect(() => {
     if (recordLocked) return;
-    if (lessShortEdited) return;
-    setForm((prev) => ({ ...prev, less_short: calculatedLessShort }));
-  }, [calculatedLessShort, recordLocked, lessShortEdited]);
+    if (!lessShortMetersEdited) {
+      setForm((prev) => ({ ...prev, less_short_meters: calculatedLessShortMeters }));
+    }
+  }, [calculatedLessShortMeters, recordLocked, lessShortMetersEdited]);
+
+  useEffect(() => {
+    if (recordLocked) return;
+    if (!lessShortJodisEdited) {
+      setForm((prev) => ({ ...prev, less_short_jodis: calculatedLessShortJodis }));
+    }
+  }, [calculatedLessShortJodis, recordLocked, lessShortJodisEdited]);
 
   const searchCheckerNames = async (value) => {
     let query = supabase
@@ -295,12 +330,15 @@ const CheckingStagePanel = ({ userId }) => {
         checker_name: form.checker_name.trim() || null,
         input_meters: form.input_meters === "" ? null : Number(form.input_meters),
         checked_meters: form.checked_meters === "" ? null : Number(form.checked_meters),
-        jodis: form.jodis === "" ? null : Number(form.jodis),
+        jodis: form.checked_jodis === "" ? null : Number(form.checked_jodis),
         taggas: form.taggas === "" ? null : Number(form.taggas),
         tp: form.tp.trim() || null,
         fold: form.fold.trim() || null,
         border: form.border.trim() || null,
-        less_short: form.less_short === "" ? null : Number(form.less_short),
+        less_short_meters: form.less_short_meters === "" ? null : Number(form.less_short_meters),
+        less_short_jodis: form.less_short_jodis === "" ? null : Number(form.less_short_jodis),
+        less_short_meters_manual: lessShortMetersEdited,
+        less_short_jodis_manual: lessShortJodisEdited,
         created_by: userId,
       };
 
@@ -317,12 +355,19 @@ const CheckingStagePanel = ({ userId }) => {
             tp: payload.tp,
             fold: payload.fold,
             border: payload.border,
-            less_short: payload.less_short,
+            less_short_meters: payload.less_short_meters,
+            less_short_jodis: payload.less_short_jodis,
+            less_short_meters_manual: payload.less_short_meters_manual,
+            less_short_jodis_manual: payload.less_short_jodis_manual,
           })
           .eq("id", recordId);
         if (updateError) {
           const message = updateError.message || "";
-          const missingCols = message.includes("checker_name") || message.includes("border");
+          const missingCols =
+            message.includes("checker_name") ||
+            message.includes("border") ||
+            message.includes("less_short_meters") ||
+            message.includes("less_short_jodis");
           if (missingCols) {
             const { error: legacyUpdateError } = await supabase
               .from("grey_checking")
@@ -334,7 +379,7 @@ const CheckingStagePanel = ({ userId }) => {
                 taggas: payload.taggas,
                 tp: payload.tp,
                 fold: payload.fold,
-                less_short: payload.less_short,
+                less_short: payload.less_short_jodis,
               })
               .eq("id", recordId);
             if (legacyUpdateError) throw legacyUpdateError;
@@ -350,7 +395,11 @@ const CheckingStagePanel = ({ userId }) => {
           .single();
         if (insertError) {
           const message = insertError.message || "";
-          const missingCols = message.includes("checker_name") || message.includes("border");
+          const missingCols =
+            message.includes("checker_name") ||
+            message.includes("border") ||
+            message.includes("less_short_meters") ||
+            message.includes("less_short_jodis");
           if (missingCols) {
             const legacyPayload = {
               lot_id: payload.lot_id,
@@ -361,7 +410,7 @@ const CheckingStagePanel = ({ userId }) => {
               taggas: payload.taggas,
               tp: payload.tp,
               fold: payload.fold,
-              less_short: payload.less_short,
+              less_short: payload.less_short_jodis,
               created_by: payload.created_by,
             };
             const { data: legacyInserted, error: legacyInsertError } = await supabase
@@ -411,6 +460,8 @@ const CheckingStagePanel = ({ userId }) => {
       setLotData(null);
       setRecordId(null);
       setRecordLocked(false);
+      setLessShortMetersEdited(false);
+      setLessShortJodisEdited(false);
       setForm(emptyForm);
       await loadList();
     } catch (e) {
@@ -499,6 +550,8 @@ const CheckingStagePanel = ({ userId }) => {
           setLotData(null);
           setRecordId(null);
           setRecordLocked(false);
+          setLessShortMetersEdited(false);
+          setLessShortJodisEdited(false);
           setForm(emptyForm);
           setError("");
           setSuccess("");
@@ -582,6 +635,17 @@ const CheckingStagePanel = ({ userId }) => {
           </label>
 
           <label className="text-sm">
+            <span className="block mb-1 text-gray-700">Input Jodis</span>
+            <input
+              type="number"
+              step="0.01"
+              value={form.input_jodis}
+              readOnly
+              className="w-full px-3 py-2 rounded-xl glass-input outline-none bg-gray-50"
+            />
+          </label>
+
+          <label className="text-sm">
             <span className="block mb-1 text-gray-700">Checked Meters</span>
             <input
               type="number"
@@ -594,12 +658,12 @@ const CheckingStagePanel = ({ userId }) => {
           </label>
 
           <label className="text-sm">
-            <span className="block mb-1 text-gray-700">Jodis</span>
+            <span className="block mb-1 text-gray-700">Checked Jodis</span>
             <input
               type="number"
               step="0.01"
-              value={form.jodis}
-              onChange={(e) => setField("jodis", e.target.value)}
+              value={form.checked_jodis}
+              onChange={(e) => setField("checked_jodis", e.target.value)}
               className="w-full px-3 py-2 rounded-xl glass-input outline-none"
               disabled={recordLocked || sending}
             />
@@ -658,14 +722,29 @@ const CheckingStagePanel = ({ userId }) => {
           </label>
 
           <label className="text-sm">
-            <span className="block mb-1 text-gray-700">Less / Short</span>
+            <span className="block mb-1 text-gray-700">Less / Short Meters</span>
             <input
               type="number"
               step="0.01"
-              value={form.less_short}
+              value={form.less_short_meters}
               onChange={(e) => {
-                setLessShortEdited(true);
-                setField("less_short", e.target.value);
+                setLessShortMetersEdited(true);
+                setField("less_short_meters", e.target.value);
+              }}
+              className="w-full px-3 py-2 rounded-xl glass-input outline-none"
+              disabled={recordLocked || sending}
+            />
+          </label>
+
+          <label className="text-sm">
+            <span className="block mb-1 text-gray-700">Less / Short Jodis</span>
+            <input
+              type="number"
+              step="0.01"
+              value={form.less_short_jodis}
+              onChange={(e) => {
+                setLessShortJodisEdited(true);
+                setField("less_short_jodis", e.target.value);
               }}
               className="w-full px-3 py-2 rounded-xl glass-input outline-none"
               disabled={recordLocked || sending}

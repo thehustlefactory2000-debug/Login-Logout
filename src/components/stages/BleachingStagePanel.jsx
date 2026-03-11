@@ -36,7 +36,7 @@ const BleachingStagePanel = ({ userId }) => {
       const { data, error: listError } = await supabase
         .from("lots")
         .select(
-          "id, lot_no, bleaching(bleach_group_no), grey_checking!inner(checked_meters, taggas)",
+          "id, lot_no, bleaching(bleach_group_no), grey_checking!inner(checked_meters, jodis, taggas)",
         )
         .eq("current_stage", "bleaching")
         .eq("status", "active")
@@ -76,6 +76,7 @@ const BleachingStagePanel = ({ userId }) => {
           index: buildSearchIndex({
             lot: lot.lot_no,
             checked: checking?.checked_meters,
+            jodis: checking?.jodis,
             tagga: checking?.taggas,
             bleached: bleaching?.bleach_group_no,
           }),
@@ -93,7 +94,7 @@ const BleachingStagePanel = ({ userId }) => {
     try {
       const { data: lot, error: lotError } = await supabase
         .from("lots")
-        .select("id, lot_no, current_stage, status, grey_checking!inner(checked_meters, taggas)")
+        .select("id, lot_no, current_stage, status, grey_checking!inner(checked_meters, jodis, taggas)")
         .eq("id", lotId)
         .single();
       if (lotError) throw lotError;
@@ -233,7 +234,7 @@ const BleachingStagePanel = ({ userId }) => {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search (e.g. lot:120, checked:520, tagga:16)"
+            placeholder="Search (e.g. lot:120, checked:520, jodis:18, tagga:16)"
             className="w-full sm:max-w-md px-3 py-2 rounded-xl glass-input outline-none text-sm"
           />
         </div>
@@ -260,6 +261,7 @@ const BleachingStagePanel = ({ userId }) => {
                     </button>
                   </div>
                   <p>Checked Meters: {checking?.checked_meters ?? "-"}</p>
+                  <p>Checked Jodis: {checking?.jodis ?? "-"}</p>
                   <p>Tagga: {checking?.taggas ?? "-"}</p>
                   <p>Bleached Lot No: {bleaching?.bleach_group_no ?? "Will generate on first save"}</p>
                 </div>
@@ -299,6 +301,7 @@ const BleachingStagePanel = ({ userId }) => {
 
         <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm space-y-1">
           <p>Checked Meters: <span className="font-medium">{checking?.checked_meters ?? "-"}</span></p>
+          <p>Checked Jodis: <span className="font-medium">{checking?.jodis ?? "-"}</span></p>
           <p>Tagga: <span className="font-medium">{checking?.taggas ?? "-"}</span></p>
         </div>
 
