@@ -5,7 +5,7 @@ import { markStageRecordCompleted, syncLotWorkflowState } from "../../lib/lotWor
 
 const one = (value) => (Array.isArray(value) ? value[0] : value) || null;
 
-const BleachingStagePanel = () => {
+const MasriseStagePanel = () => {
   const [mode, setMode] = useState("list");
   const [rows, setRows] = useState([]);
   const [lotData, setLotData] = useState(null);
@@ -32,17 +32,16 @@ const BleachingStagePanel = () => {
     try {
       const { data, error: listError } = await supabase
         .from("lots")
-        .select("id, lot_no, status, grey_checking!inner(checked_meters, checked_length, jodis, taggas), bleaching(id, bleach_group_no, bleach_type, next_stage, input_meters, is_locked)")
+        .select("id, lot_no, status, masrise(id, input_meters, instruction, is_locked)")
         .eq("status", "active")
         .order("lot_no", { ascending: false });
-
       if (listError) throw listError;
       setRows((data || []).filter((lot) => {
-        const bleaching = one(lot.bleaching);
-        return bleaching?.id && !bleaching.is_locked;
+        const masrise = one(lot.masrise);
+        return masrise?.id && !masrise.is_locked;
       }));
     } catch (e) {
-      setError(e.message || "Failed to load bleaching lots.");
+      setError(e.message || "Failed to load masrise lots.");
     } finally {
       setLoading(false);
     }
@@ -51,10 +50,9 @@ const BleachingStagePanel = () => {
   useEffect(() => {
     loadList();
     const channel = supabase
-      .channel("realtime-bleaching-stage")
+      .channel("realtime-masrise-stage")
       .on("postgres_changes", { event: "*", schema: "public", table: "lots" }, loadList)
-      .on("postgres_changes", { event: "*", schema: "public", table: "grey_checking" }, loadList)
-      .on("postgres_changes", { event: "*", schema: "public", table: "bleaching" }, loadList)
+      .on("postgres_changes", { event: "*", schema: "public", table: "masrise" }, loadList)
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, []);
@@ -62,17 +60,13 @@ const BleachingStagePanel = () => {
   const indexedRows = useMemo(
     () =>
       rows.map((lot) => {
-        const checking = one(lot.grey_checking);
-        const bleaching = one(lot.bleaching);
+        const masrise = one(lot.masrise);
         return {
           row: lot,
           index: buildSearchIndex({
             lot: lot.lot_no,
-            meters: bleaching?.input_meters ?? checking?.checked_meters,
-            jodis: checking?.jodis,
-            type: bleaching?.bleach_type,
-            next: bleaching?.next_stage,
-            group: bleaching?.bleach_group_no,
+            meters: masrise?.input_meters,
+            instruction: masrise?.instruction,
           }),
         };
       }),
@@ -88,42 +82,36 @@ const BleachingStagePanel = () => {
     try {
       const { data: lot, error: lotError } = await supabase
         .from("lots")
-        .select("id, lot_no, status, grey_checking!inner(checked_meters, checked_length, jodis, taggas), bleaching(id, bleach_group_no, bleach_type, next_stage, input_meters, is_locked)")
+        .select("id, lot_no, status, masrise(id, input_meters, instruction, is_locked)")
         .eq("id", lotId)
         .single();
       if (lotError) throw lotError;
-
-      const existing = one(lot.bleaching);
-      if (!existing?.id) throw new Error("Bleaching instruction not found for this lot.");
-
+      const existing = one(lot.masrise);
+      if (!existing?.id) throw new Error("Masrise instruction not found for this lot.");
       setLotData(lot);
       setRecordId(existing.id);
       setRecordLocked(Boolean(existing.is_locked));
       setMode("form");
     } catch (e) {
-      setError(e.message || "Failed to open bleaching lot.");
+      setError(e.message || "Failed to open masrise lot.");
     } finally {
       setLoading(false);
     }
   };
 
   const markCompleted = async () => {
-    if (!lotData?.id || !recordId) {
-      setError("Open a lot first.");
-      return;
-    }
-
+    if (!lotData?.id || !recordId) return setError("Open a lot first.");
     setSending(true);
     setError("");
     setSuccess("");
     try {
-      await markStageRecordCompleted("bleaching", recordId);
+      await markStageRecordCompleted("masrise", recordId);
       await syncLotWorkflowState(lotData.id);
-      setSuccess(`Lot #${lotData.lot_no} bleaching marked completed.`);
+      setSuccess(`Lot #${lotData.lot_no} masrise marked completed.`);
       resetForm();
       await loadList();
     } catch (e) {
-      setError(e.message || "Failed to complete bleaching.");
+      setError(e.message || "Failed to complete masrise.");
     } finally {
       setSending(false);
     }
@@ -133,39 +121,27 @@ const BleachingStagePanel = () => {
     return (
       <div className="glass-card p-4 sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-2">
-          <h2 className="text-xl surface-title">Bleaching Dashboard</h2>
+          <h2 className="text-xl surface-title">Masrise Dashboard</h2>
           <button type="button" onClick={loadList} disabled={loading} className="btn-secondary btn-sm disabled:opacity-60">
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
         {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
         <div className="mb-3">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search (e.g. lot:120, type:power, next:dyeing)"
-            className="w-full rounded-xl glass-input px-3 py-2 text-sm outline-none sm:max-w-md"
-          />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search (e.g. lot:120, meters:490, instruction:soft)" className="w-full rounded-xl glass-input px-3 py-2 text-sm outline-none sm:max-w-md" />
         </div>
-        {loading ? (
-          <p className="text-sm text-gray-600">Loading lots in bleaching stage...</p>
-        ) : filteredRows.length === 0 ? (
-          <p className="text-sm text-gray-600">No lots are currently in bleaching stage.</p>
-        ) : (
+        {loading ? <p className="text-sm text-gray-600">Loading lots in masrise stage...</p> : filteredRows.length === 0 ? <p className="text-sm text-gray-600">No lots are currently in masrise stage.</p> : (
           <div className="space-y-3">
             {filteredRows.map((lot) => {
-              const checking = one(lot.grey_checking);
-              const bleaching = one(lot.bleaching);
+              const masrise = one(lot.masrise);
               return (
                 <div key={lot.id} className="rounded-xl border border-slate-200/80 bg-white/70 p-3 text-sm shadow-sm">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-semibold text-gray-900">Lot #{lot.lot_no}</p>
                     <button type="button" onClick={() => openLot(lot.id)} className="btn-dark btn-sm">Open</button>
                   </div>
-                  <p>Bleach Type: {bleaching?.bleach_type || "-"}</p>
-                  <p>Planned Input Meters: {bleaching?.input_meters ?? checking?.checked_meters ?? "-"}</p>
-                  <p>Next Stage: {bleaching?.next_stage || "-"}</p>
+                  <p>Planned Input Meters: {masrise?.input_meters ?? "-"}</p>
+                  <p>Instruction: {masrise?.instruction || "-"}</p>
                 </div>
               );
             })}
@@ -175,23 +151,17 @@ const BleachingStagePanel = () => {
     );
   }
 
-  const checking = one(lotData?.grey_checking);
-  const bleaching = one(lotData?.bleaching);
+  const masrise = one(lotData?.masrise);
 
   return (
     <div className="space-y-3">
-      <button type="button" onClick={resetForm} className="btn-secondary">Back To Bleaching Dashboard</button>
+      <button type="button" onClick={resetForm} className="btn-secondary">Back To Masrise Dashboard</button>
       <div className="glass-card p-4 sm:p-6">
-        <h2 className="mb-2 text-xl surface-title">Bleaching Instruction</h2>
+        <h2 className="mb-2 text-xl surface-title">Masrise Instruction</h2>
         <p className="mb-4 text-sm text-gray-600">Lot No: <span className="font-semibold">{lotData?.lot_no}</span></p>
         <div className="mb-4 space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
-          <p>Bleached Lot No: <span className="font-medium">{bleaching?.bleach_group_no ?? "-"}</span></p>
-          <p>Bleach Type: <span className="font-medium">{bleaching?.bleach_type || "-"}</span></p>
-          <p>Planned Input Meters: <span className="font-medium">{bleaching?.input_meters ?? checking?.checked_meters ?? "-"}</span></p>
-          <p>Checked Jodis: <span className="font-medium">{checking?.jodis ?? "-"}</span></p>
-          <p>Checked Length: <span className="font-medium">{checking?.checked_length ?? "-"}</span></p>
-          <p>Taggas: <span className="font-medium">{checking?.taggas ?? "-"}</span></p>
-          <p>Next Stage: <span className="font-medium">{bleaching?.next_stage || "-"}</span></p>
+          <p>Planned Input Meters: <span className="font-medium">{masrise?.input_meters ?? "-"}</span></p>
+          <p>Instruction: <span className="font-medium">{masrise?.instruction || "-"}</span></p>
         </div>
         {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
         {success && <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">{success}</div>}
@@ -203,4 +173,4 @@ const BleachingStagePanel = () => {
   );
 };
 
-export default BleachingStagePanel;
+export default MasriseStagePanel;

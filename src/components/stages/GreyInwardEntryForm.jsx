@@ -54,16 +54,15 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
   };
 
   const loadNextLotNo = async () => {
-    const { data, error: lotError } = await supabase
-      .from("lots")
-      .select("lot_no")
-      .order("lot_no", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data, error: rpcError } = await supabase.rpc("get_next_lot_no");
 
-    if (lotError) throw lotError;
-    setNextLotNo((data?.lot_no ?? 0) + 1);
-  };
+    if (!rpcError && Number.isFinite(Number(data))) {
+      setNextLotNo(Number(data));
+      return;
+    }
+
+     setNextLotNo(null);
+};
 
   const loadLotForEdit = async (lotId) => {
     const { data: lot, error: lotError } = await supabase
@@ -310,17 +309,49 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
       let lotNo = currentLotNo;
 
       if (!lotId) {
-        const { data: lot, error: lotError } = await supabase
+        const lotInsertPayload = {
+          party_id: partyId,
+          grey_party_id: greyPartyId,
+          cloth_type: savedClothType,
+          entry_date: entryDate,
+          created_by: userId,
+        };
+        if (Number.isFinite(Number(nextLotNo))) {
+          lotInsertPayload.lot_no = Number(nextLotNo);
+        }
+
+        let lot = null;
+        let lotError = null;
+        ({ data: lot, error: lotError } = await supabase
           .from("lots")
-          .insert({
-            party_id: partyId,
-            grey_party_id: greyPartyId,
-            cloth_type: savedClothType,
-            entry_date: entryDate,
-            created_by: userId,
-          })
+          .insert(lotInsertPayload)
           .select("id, lot_no")
-          .single();
+          .single());
+
+        if (lotError && lotInsertPayload.lot_no != null) {
+          const message = lotError.message || "";
+          const manualLotNoUnsupported =
+            message.includes("generated always") ||
+            message.includes("non-DEFAULT value") ||
+            message.includes('column "lot_no"') ||
+            message.includes("identity column") ||
+            message.includes("duplicate key value");
+
+          if (manualLotNoUnsupported) {
+            ({ data: lot, error: lotError } = await supabase
+              .from("lots")
+              .insert({
+                party_id: partyId,
+                grey_party_id: greyPartyId,
+                cloth_type: savedClothType,
+                entry_date: entryDate,
+                created_by: userId,
+              })
+              .select("id, lot_no")
+              .single());
+          }
+        }
+
         if (lotError) throw lotError;
         lotId = lot.id;
         lotNo = lot.lot_no;
@@ -389,7 +420,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 
       setCurrentLotId(lotId);
       setCurrentLotNo(lotNo);
-      setNextLotNo((lotNo ?? 0) + 1);
+      await loadNextLotNo();
       setSuccess(`Saved. Lot No: ${lotNo}. You can edit and save again until you send to checking.`);
       await loadClothTypes();
       if (onSaved) onSaved();

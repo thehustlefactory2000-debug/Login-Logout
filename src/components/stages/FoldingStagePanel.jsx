@@ -1,29 +1,30 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { buildSearchIndex, filterIndexedRows } from "../../lib/stageSearch";
+import { markStageRecordCompleted, syncLotWorkflowState } from "../../lib/lotWorkflow";
 
-const FOLDING_TYPE_OPTIONS = [
-  { value: "single_fold", label: "Single Fold" },
-  { value: "double_fold", label: "Double Fold" },
-  { value: "double_fold_checking", label: "Double Fold + Checking" },
-  { value: "single_fold_cutting", label: "Single Fold + Cutting" },
-];
+const one = (value) => (Array.isArray(value) ? value[0] : value) || null;
 
-const FoldingStagePanel = ({ userId }) => {
+const FoldingStagePanel = () => {
   const [mode, setMode] = useState("list");
   const [rows, setRows] = useState([]);
   const [lotData, setLotData] = useState(null);
   const [recordId, setRecordId] = useState(null);
   const [recordLocked, setRecordLocked] = useState(false);
-  const [workerName, setWorkerName] = useState("");
-  const [foldingType, setFoldingType] = useState("");
   const [search, setSearch] = useState("");
-
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const resetForm = () => {
+    setMode("list");
+    setLotData(null);
+    setRecordId(null);
+    setRecordLocked(false);
+    setError("");
+    setSuccess("");
+  };
 
   const loadList = async () => {
     setLoading(true);
@@ -31,13 +32,14 @@ const FoldingStagePanel = ({ userId }) => {
     try {
       const { data, error: listError } = await supabase
         .from("lots")
-        .select("id, lot_no, finishing!inner(finished_meters, finishing_type)")
-        .eq("current_stage", "folding")
+        .select("id, lot_no, status, finishing(finishing_type, input_meters), folding(id, input_meters, folding_type, is_locked)")
         .eq("status", "active")
         .order("lot_no", { ascending: false });
-
       if (listError) throw listError;
-      setRows(data || []);
+      setRows((data || []).filter((lot) => {
+        const folding = one(lot.folding);
+        return folding?.id && !folding.is_locked;
+      }));
     } catch (e) {
       setError(e.message || "Failed to load folding lots.");
     } finally {
@@ -47,29 +49,25 @@ const FoldingStagePanel = ({ userId }) => {
 
   useEffect(() => {
     loadList();
-
     const channel = supabase
       .channel("realtime-folding-stage")
       .on("postgres_changes", { event: "*", schema: "public", table: "lots" }, loadList)
       .on("postgres_changes", { event: "*", schema: "public", table: "finishing" }, loadList)
       .on("postgres_changes", { event: "*", schema: "public", table: "folding" }, loadList)
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => supabase.removeChannel(channel);
   }, []);
 
   const indexedRows = useMemo(
     () =>
       rows.map((lot) => {
-      const finishing = Array.isArray(lot.finishing) ? lot.finishing[0] : lot.finishing;
+        const folding = one(lot.folding);
         return {
           row: lot,
           index: buildSearchIndex({
             lot: lot.lot_no,
-            type: finishing?.finishing_type,
-            meters: finishing?.finished_meters,
+            meters: folding?.input_meters,
+            type: folding?.folding_type,
           }),
         };
       }),
@@ -85,28 +83,15 @@ const FoldingStagePanel = ({ userId }) => {
     try {
       const { data: lot, error: lotError } = await supabase
         .from("lots")
-        .select("id, lot_no, current_stage, status, finishing!inner(finished_meters, finishing_type)")
+        .select("id, lot_no, status, finishing(finishing_type, input_meters), folding(id, input_meters, folding_type, is_locked)")
         .eq("id", lotId)
         .single();
       if (lotError) throw lotError;
-      if (lot.current_stage !== "folding") {
-        throw new Error(`Lot is in ${lot.current_stage} stage, not folding.`);
-      }
-
-      const { data: existing, error: foldingError } = await supabase
-        .from("folding")
-        .select("id, worker_name, folding_type, is_locked")
-        .eq("lot_id", lotId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (foldingError) throw foldingError;
-
+      const existing = one(lot.folding);
+      if (!existing?.id) throw new Error("Folding instruction not found for this lot.");
       setLotData(lot);
-      setRecordId(existing?.id || null);
-      setRecordLocked(Boolean(existing?.is_locked));
-      setWorkerName(existing?.worker_name || "");
-      setFoldingType(existing?.folding_type || "");
+      setRecordId(existing.id);
+      setRecordLocked(Boolean(existing.is_locked));
       setMode("form");
     } catch (e) {
       setError(e.message || "Failed to open folding lot.");
@@ -115,90 +100,19 @@ const FoldingStagePanel = ({ userId }) => {
     }
   };
 
-  const save = async (e) => {
-    e.preventDefault();
-    setError("");
-    setSuccess("");
-
-    if (!lotData?.id) {
-      setError("Open a valid lot first.");
-      return;
-    }
-    if (!workerName.trim() || !foldingType) {
-      setError("Labour name and folding type are required.");
-      return;
-    }
-    if (recordLocked) {
-      setError("This folding record is already sent/locked.");
-      return;
-    }
-
-    const finishing = Array.isArray(lotData.finishing) ? lotData.finishing[0] : lotData.finishing;
-    const inputMeters = finishing?.finished_meters ?? null;
-
-    setSaving(true);
-    try {
-      if (recordId) {
-        const { error: updateError } = await supabase
-          .from("folding")
-          .update({
-            input_meters: inputMeters,
-            worker_name: workerName.trim(),
-            folding_type: foldingType,
-          })
-          .eq("id", recordId);
-        if (updateError) throw updateError;
-      } else {
-        const { data: inserted, error: insertError } = await supabase
-          .from("folding")
-          .insert({
-            lot_id: lotData.id,
-            input_meters: inputMeters,
-            worker_name: workerName.trim(),
-            folding_type: foldingType,
-            created_by: userId,
-          })
-          .select("id")
-          .single();
-        if (insertError) throw insertError;
-        setRecordId(inserted.id);
-      }
-
-      setSuccess("Folding data saved. You can now complete this lot.");
-      await loadList();
-    } catch (e) {
-      setError(e.message || "Failed to save folding data.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const sendToCompleted = async () => {
-    setError("");
-    setSuccess("");
-    if (!lotData?.id) {
-      setError("Open a lot first.");
-      return;
-    }
-
+  const markCompleted = async () => {
+    if (!lotData?.id || !recordId) return setError("Open a lot first.");
     setSending(true);
+    setError("");
+    setSuccess("");
     try {
-      const { error: rpcError } = await supabase.rpc("send_folding_to_completed", {
-        p_lot_id: lotData.id,
-        p_done_by: userId,
-      });
-      if (rpcError) throw rpcError;
-
+      await markStageRecordCompleted("folding", recordId);
+      await syncLotWorkflowState(lotData.id);
       setSuccess(`Lot #${lotData.lot_no} marked as completed.`);
-      setMode("list");
-      setLotData(null);
-      setRecordId(null);
-      setRecordLocked(false);
-      setWorkerName("");
-      setFoldingType("");
+      resetForm();
       await loadList();
     } catch (e) {
-      setError(e.message || "Failed to complete lot.");
+      setError(e.message || "Failed to complete folding.");
     } finally {
       setSending(false);
     }
@@ -207,52 +121,30 @@ const FoldingStagePanel = ({ userId }) => {
   if (mode === "list") {
     return (
       <div className="glass-card p-4 sm:p-6">
-        <div className="flex items-center justify-between gap-2 mb-4">
+        <div className="mb-4 flex items-center justify-between gap-2">
           <h2 className="text-xl surface-title">Folding Dashboard</h2>
-          <button
-            type="button"
-            onClick={loadList}
-            disabled={loading}
-            className="btn-secondary btn-sm disabled:opacity-60"
-          >
+          <button type="button" onClick={loadList} disabled={loading} className="btn-secondary btn-sm disabled:opacity-60">
             {loading ? "Refreshing..." : "Refresh"}
           </button>
         </div>
-
-        {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
-
+        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
         <div className="mb-3">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search (e.g. lot:120, type:single, meters:490)"
-            className="w-full sm:max-w-md px-3 py-2 rounded-xl glass-input outline-none text-sm"
-          />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search (e.g. lot:120, type:single, meters:490)" className="w-full rounded-xl glass-input px-3 py-2 text-sm outline-none sm:max-w-md" />
         </div>
-
-        {loading ? (
-          <p className="text-sm text-gray-600">Loading lots in folding stage...</p>
-        ) : filteredRows.length === 0 ? (
-          <p className="text-sm text-gray-600">No lots are currently in folding stage.</p>
-        ) : (
+        {loading ? <p className="text-sm text-gray-600">Loading lots in folding stage...</p> : filteredRows.length === 0 ? <p className="text-sm text-gray-600">No lots are currently in folding stage.</p> : (
           <div className="space-y-3">
             {filteredRows.map((lot) => {
-              const finishing = Array.isArray(lot.finishing) ? lot.finishing[0] : lot.finishing;
+              const finishing = one(lot.finishing);
+              const folding = one(lot.folding);
               return (
                 <div key={lot.id} className="rounded-xl border border-slate-200/80 bg-white/70 p-3 text-sm shadow-sm">
                   <div className="flex items-center justify-between gap-2">
                     <p className="font-semibold text-gray-900">Lot #{lot.lot_no}</p>
-                    <button
-                      type="button"
-                      onClick={() => openLot(lot.id)}
-                      className="btn-dark btn-sm"
-                    >
-                      Open
-                    </button>
+                    <button type="button" onClick={() => openLot(lot.id)} className="btn-dark btn-sm">Open</button>
                   </div>
                   <p>Finishing Type: {finishing?.finishing_type || "-"}</p>
-                  <p>Meters From Previous Stage: {finishing?.finished_meters ?? "-"}</p>
+                  <p>Folding Type: {folding?.folding_type || "-"}</p>
+                  <p>Planned Input Meters: {folding?.input_meters ?? finishing?.input_meters ?? "-"}</p>
                 </div>
               );
             })}
@@ -262,93 +154,28 @@ const FoldingStagePanel = ({ userId }) => {
     );
   }
 
-  const finishing = Array.isArray(lotData?.finishing) ? lotData.finishing[0] : lotData?.finishing;
+  const finishing = one(lotData?.finishing);
+  const folding = one(lotData?.folding);
 
   return (
     <div className="space-y-3">
-      <button
-        type="button"
-        onClick={() => {
-          setMode("list");
-          setLotData(null);
-          setRecordId(null);
-          setRecordLocked(false);
-          setWorkerName("");
-          setFoldingType("");
-          setError("");
-          setSuccess("");
-        }}
-        className="btn-secondary"
-      >
-        Back To Folding Dashboard
-      </button>
-
+      <button type="button" onClick={resetForm} className="btn-secondary">Back To Folding Dashboard</button>
       <div className="glass-card p-4 sm:p-6">
-        <h2 className="text-xl surface-title mb-2">Folding Entry</h2>
-        <p className="text-sm text-gray-600 mb-4">Lot No: <span className="font-semibold">{lotData?.lot_no}</span></p>
-
-        <div className="mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm">
+        <h2 className="mb-2 text-xl surface-title">Folding Instruction</h2>
+        <p className="mb-4 text-sm text-gray-600">Lot No: <span className="font-semibold">{lotData?.lot_no}</span></p>
+        <div className="mb-4 space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
           <p>Finishing Type: <span className="font-medium">{finishing?.finishing_type || "-"}</span></p>
-          <p>Meters From Previous Stage: <span className="font-medium">{finishing?.finished_meters ?? "-"}</span></p>
+          <p>Folding Type: <span className="font-medium">{folding?.folding_type || "-"}</span></p>
+          <p>Planned Input Meters: <span className="font-medium">{folding?.input_meters ?? finishing?.input_meters ?? "-"}</span></p>
         </div>
-
-        {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
-        {success && <div className="mb-4 p-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm">{success}</div>}
-
-        <form onSubmit={save} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="text-sm">
-            <span className="block mb-1 text-gray-700">Labour Name</span>
-            <input
-              type="text"
-              value={workerName}
-              onChange={(e) => setWorkerName(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl glass-input outline-none"
-              disabled={recordLocked || sending}
-            />
-          </label>
-
-          <label className="text-sm">
-            <span className="block mb-1 text-gray-700">Folding Type</span>
-            <select
-              value={foldingType}
-              onChange={(e) => setFoldingType(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl glass-input outline-none"
-              required
-              disabled={recordLocked || sending}
-            >
-              <option value="">Select Folding Type</option>
-              {FOLDING_TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </label>
-
-          <div className="sm:col-span-2 flex flex-col sm:flex-row gap-2">
-            <button
-              type="submit"
-              disabled={saving || recordLocked || sending}
-              className="btn-primary disabled:opacity-60"
-            >
-              {saving ? "Saving..." : "Save"}
-            </button>
-            <button
-              type="button"
-              onClick={sendToCompleted}
-              disabled={sending || recordLocked || !lotData?.id}
-              className="btn-dark disabled:opacity-60"
-            >
-              {sending ? "Sending..." : "Mark Lot Completed"}
-            </button>
-          </div>
-        </form>
+        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+        {success && <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">{success}</div>}
+        <button type="button" onClick={markCompleted} disabled={sending || recordLocked} className="btn-dark disabled:opacity-60">
+          {sending ? "Completing..." : "Mark Completed"}
+        </button>
       </div>
     </div>
   );
 };
 
 export default FoldingStagePanel;
-
-
-
-
-

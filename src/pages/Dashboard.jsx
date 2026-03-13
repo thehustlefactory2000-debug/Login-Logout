@@ -8,6 +8,7 @@ import GreyInwardEntryForm from "../components/stages/GreyInwardEntryForm";
 import GreyInwardPendingList from "../components/stages/GreyInwardPendingList";
 import CheckingStagePanel from "../components/stages/CheckingStagePanel";
 import BleachingStagePanel from "../components/stages/BleachingStagePanel";
+import MasriseStagePanel from "../components/stages/MasriseStagePanel";
 import DyeingStagePanel from "../components/stages/DyeingStagePanel";
 import StenterStagePanel from "../components/stages/StenterStagePanel";
 import FinishingStagePanel from "../components/stages/FinishingStagePanel";
@@ -108,6 +109,10 @@ const Dashboard = () => {
           <BleachingStagePanel userId={user?.id} />
         )}
 
+        {profile?.assignedStage === "masrise" && (
+          <MasriseStagePanel userId={user?.id} />
+        )}
+
         {profile?.assignedStage === "dyeing" && (
           <DyeingStagePanel userId={user?.id} />
         )}
@@ -124,7 +129,7 @@ const Dashboard = () => {
           <FoldingStagePanel userId={user?.id} />
         )}
 
-        {profile?.assignedStage && profile.assignedStage !== "grey_inward" && profile.assignedStage !== "checking" && profile.assignedStage !== "bleaching" && profile.assignedStage !== "dyeing" && profile.assignedStage !== "stenter" && profile.assignedStage !== "finishing" && profile.assignedStage !== "folding" && STAGE_FORM_CONFIG[profile.assignedStage] && (
+        {profile?.assignedStage && profile.assignedStage !== "grey_inward" && profile.assignedStage !== "checking" && profile.assignedStage !== "bleaching" && profile.assignedStage !== "masrise" && profile.assignedStage !== "dyeing" && profile.assignedStage !== "stenter" && profile.assignedStage !== "finishing" && profile.assignedStage !== "folding" && STAGE_FORM_CONFIG[profile.assignedStage] && (
           <StageEntryForm config={STAGE_FORM_CONFIG[profile.assignedStage]} userId={user?.id} />
         )}
 

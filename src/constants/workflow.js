@@ -2,6 +2,7 @@ export const STAGE_OPTIONS = [
   "grey_inward",
   "checking",
   "bleaching",
+  "masrise",
   "dyeing",
   "stenter",
   "finishing",
@@ -12,6 +13,7 @@ export const STAGE_LABELS = {
   grey_inward: "Grey Inward",
   checking: "Checking",
   bleaching: "Bleaching",
+  masrise: "Masrise",
   dyeing: "Dyeing",
   stenter: "Stenter",
   finishing: "Finishing",
@@ -73,6 +75,17 @@ export const STAGE_FORM_CONFIG = {
         type: "select",
         options: ["dyeing", "stenter"],
       },
+    ],
+  },
+  masrise: {
+    table: "masrise",
+    title: "Masrise Entry",
+    expectedStage: "masrise",
+    fields: [
+      { key: "input_meters", label: "Input Meters", type: "number" },
+      { key: "completed_meters", label: "Completed Meters", type: "number" },
+      { key: "instruction", label: "Instruction", type: "text" },
+      { key: "completed_details", label: "Completed Details", type: "text" },
     ],
   },
   dyeing: {
