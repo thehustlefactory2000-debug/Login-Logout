@@ -71,7 +71,7 @@ const AdminBillingPanel = () => {
         supabase
           .from("lots")
           .select(
-            "id, lot_no, cloth_type, current_stage, status, created_at, party:party_id(name), grey_party:grey_party_id(name), grey_checking(taggas), bleaching(id, bleach_type, input_meters, output_meters, is_locked), masrise(id, input_meters, completed_meters, is_locked), dyeing(id, input_meters, dyed_meters, is_locked), stenter(id, input_meters, stentered_meters, is_locked), finishing(id, input_meters, finished_meters, finishing_type, is_locked), folding(id, input_meters, folding_type, is_locked)",
+            "id, lot_no, cloth_type, current_stage, status, created_at, party:party_id(name), grey_party:grey_party_id(name), grey_checking(taggas), bleaching(id, bleach_type, input_meters, output_meters, is_locked), masrise(id, input_meters, completed_meters, is_locked), dyeing(id, input_meters, dyed_meters, is_locked), stenter(id, input_meters, stentered_meters, stenter_type, is_locked), finishing(id, input_meters, finished_meters, finishing_type, is_locked), folding(id, input_meters, folding_type, is_locked)",
           )
           .order("created_at", { ascending: false }),
         supabase.from("stage_rates").select("id, stage, parameter_value, meter_rate, taggas_rate, is_active"),
@@ -497,119 +497,247 @@ const AdminBillingPanel = () => {
             Pay filtered by taggas ({bulkFilteredTaggas.length})
           </button>
         </div>
-        <div className="overflow-x-auto p-4 sm:p-6">
+        <div className="p-4 sm:p-6">
           {loading ? (
             <p className="text-sm text-slate-500">Loading billing rows...</p>
           ) : filteredRows.length === 0 ? (
             <p className="text-sm text-slate-500">No billing rows match the selected filters.</p>
           ) : (
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">
-                  <th className="py-3 pr-3">
+            <>
+              <div className="space-y-3 md:hidden">
+                <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
                       checked={filteredRows.length > 0 && selectedInViewCount === filteredRows.length}
                       onChange={toggleSelectAllFiltered}
                     />
-                  </th>
-                  <th className="py-3 pr-3">Lot</th>
-                  <th className="py-3 pr-3">Lot Paid</th>
-                  <th className="py-3 pr-3">Date</th>
-                  <th className="py-3 pr-3">Stage</th>
-                  <th className="py-3 pr-3">Parameter</th>
-                  <th className="py-3 pr-3">Status</th>
-                  <th className="py-3 pr-3">Processed Meters</th>
-                  <th className="py-3 pr-3">Taggas</th>
-                  <th className="py-3 pr-3">Meter Rate</th>
-                  <th className="py-3 pr-3">Meter Amount</th>
-                  <th className="py-3 pr-3">Taggas Rate</th>
-                  <th className="py-3 pr-3">Taggas Amount</th>
-                  <th className="py-3 pr-3">Paid</th>
-                  <th className="py-3 pr-0">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
+                    <span>Select all</span>
+                  </label>
+                  <span>Selected: {selectedInViewCount}</span>
+                </div>
+
                 {filteredRows.map((row) => (
-                  <tr key={row.id} className="border-b border-slate-100 text-slate-700">
-                    <td className="py-4 pr-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedRowIds.has(row.id)}
-                        onChange={() => toggleSelectRow(row.id)}
-                      />
-                    </td>
-                    <td className="py-4 pr-3">
-                      <div className="font-semibold text-slate-900">#{row.lotNo}</div>
-                      <div className="mt-1 text-xs text-slate-500">{row.partyName}</div>
-                    </td>
-                    <td className="py-4 pr-3">
-                      {lotPaidMap.get(row.lotId) ? (
-                        <span className="status-pill success">Paid</span>
-                      ) : (
-                        <span className="status-pill warn">Unpaid</span>
-                      )}
-                    </td>
-                    <td className="py-4 pr-3 text-xs text-slate-500">{toPrintableDate(row.createdAt)}</td>
-                    <td className="py-4 pr-3">{row.stageLabel}</td>
-                    <td className="py-4 pr-3">{row.parameterLabel}</td>
-                    <td className="py-4 pr-3">
+                  <div key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <label className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedRowIds.has(row.id)}
+                          onChange={() => toggleSelectRow(row.id)}
+                        />
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">#{row.lotNo}</div>
+                          <div className="mt-1 text-xs text-slate-500">{row.stageLabel}</div>
+                          <div className="mt-1 text-xs text-slate-500">{row.partyName}</div>
+                        </div>
+                      </label>
                       <span className={`status-pill ${getStatusTone(row.status)}`}>{row.status}</span>
-                    </td>
-                    <td className="py-4 pr-3 font-medium text-slate-900">{row.processedMeters.toFixed(2)}</td>
-                    <td className="py-4 pr-3 font-medium text-slate-900">{row.taggas.toFixed(2)}</td>
-                    <td className="py-4 pr-3">
-                      <div className="font-medium text-slate-900">{row.meterRate == null ? "-" : row.meterRate.toFixed(2)}</div>
-                      <div className="mt-1 text-xs text-slate-500">{row.rateStatus.replaceAll("_", " ")}</div>
-                    </td>
-                    <td className="py-4 pr-3 font-semibold text-slate-900">{row.meterAmount.toFixed(2)}</td>
-                    <td className="py-4 pr-3">{row.taggasRate == null ? "-" : row.taggasRate.toFixed(2)}</td>
-                    <td className="py-4 pr-3 font-semibold text-slate-900">{row.taggasAmount.toFixed(2)}</td>
-                    <td className="py-4 pr-3">
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                      <span>{toPrintableDate(row.createdAt)}</span>
+                      <span className="text-slate-300">•</span>
+                      {lotPaidMap.get(row.lotId) ? (
+                        <span className="status-pill success">Lot paid</span>
+                      ) : (
+                        <span className="status-pill warn">Lot unpaid</span>
+                      )}
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-600">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Parameter</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{row.parameterLabel}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Processed Meters</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{row.processedMeters.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Taggas</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{row.taggas.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Rate Status</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{row.rateStatus.replaceAll("_", " ")}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-600">
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Meter Rate</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{row.meterRate == null ? "-" : row.meterRate.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Meter Amount</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{row.meterAmount.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Taggas Rate</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{row.taggasRate == null ? "-" : row.taggasRate.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Taggas Amount</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{row.taggasAmount.toFixed(2)}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                       {row.paid ? (
                         <div className="space-y-1">
                           <div className="font-semibold text-emerald-700">Paid</div>
-                          <div className="text-xs text-slate-500">{row.paidUnit} • {row.paidAmount.toFixed(2)}</div>
+                          <div className="text-xs text-slate-500">{row.paidUnit} {row.paidAmount.toFixed(2)}</div>
                           <div className="text-xs text-slate-500">{toPrintableDate(row.paidAt)}</div>
                         </div>
                       ) : (
                         <div className="text-xs text-slate-500">Unpaid</div>
                       )}
-                    </td>
-                    <td className="py-4 pr-0">
-                      <div className="flex flex-wrap gap-2">
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={paymentBusy || row.meterRate == null || row.processedMeters <= 0}
+                        onClick={() => openPayDialog(row, "meters")}
+                      >
+                        Pay meter
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        disabled={paymentBusy || row.taggasRate == null || row.taggas <= 0}
+                        onClick={() => openPayDialog(row, "taggas")}
+                      >
+                        Pay taggas
+                      </button>
+                      {row.paid ? (
                         <button
                           type="button"
-                          className="btn-secondary"
-                          disabled={paymentBusy || row.meterRate == null || row.processedMeters <= 0}
-                          onClick={() => openPayDialog(row, "meters")}
+                          className="btn-danger"
+                          disabled={paymentBusy}
+                          onClick={() => openClearDialog(row)}
                         >
-                          Pay meter
+                          Clear
                         </button>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          disabled={paymentBusy || row.taggasRate == null || row.taggas <= 0}
-                          onClick={() => openPayDialog(row, "taggas")}
-                        >
-                          Pay taggas
-                        </button>
-                        {row.paid ? (
-                          <button
-                            type="button"
-                            className="btn-danger"
-                            disabled={paymentBusy}
-                            onClick={() => openClearDialog(row)}
-                          >
-                            Clear
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
+                      ) : null}
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">
+                      <th className="py-3 pr-3">
+                        <input
+                          type="checkbox"
+                          checked={filteredRows.length > 0 && selectedInViewCount === filteredRows.length}
+                          onChange={toggleSelectAllFiltered}
+                        />
+                      </th>
+                      <th className="py-3 pr-3">Lot</th>
+                      <th className="py-3 pr-3">Lot Paid</th>
+                      <th className="py-3 pr-3">Date</th>
+                      <th className="py-3 pr-3">Stage</th>
+                      <th className="py-3 pr-3">Parameter</th>
+                      <th className="py-3 pr-3">Status</th>
+                      <th className="py-3 pr-3">Processed Meters</th>
+                      <th className="py-3 pr-3">Taggas</th>
+                      <th className="py-3 pr-3">Meter Rate</th>
+                      <th className="py-3 pr-3">Meter Amount</th>
+                      <th className="py-3 pr-3">Taggas Rate</th>
+                      <th className="py-3 pr-3">Taggas Amount</th>
+                      <th className="py-3 pr-3">Paid</th>
+                      <th className="py-3 pr-0">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredRows.map((row) => (
+                      <tr key={row.id} className="border-b border-slate-100 text-slate-700">
+                        <td className="py-4 pr-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedRowIds.has(row.id)}
+                            onChange={() => toggleSelectRow(row.id)}
+                          />
+                        </td>
+                        <td className="py-4 pr-3">
+                          <div className="font-semibold text-slate-900">#{row.lotNo}</div>
+                          <div className="mt-1 text-xs text-slate-500">{row.stageLabel}</div>
+                          <div className="mt-1 text-xs text-slate-500">{row.partyName}</div>
+                        </td>
+                        <td className="py-4 pr-3">
+                          {lotPaidMap.get(row.lotId) ? (
+                            <span className="status-pill success">Paid</span>
+                          ) : (
+                            <span className="status-pill warn">Unpaid</span>
+                          )}
+                        </td>
+                        <td className="py-4 pr-3 text-xs text-slate-500">{toPrintableDate(row.createdAt)}</td>
+                        <td className="py-4 pr-3">{row.stageLabel}</td>
+                        <td className="py-4 pr-3">{row.parameterLabel}</td>
+                        <td className="py-4 pr-3">
+                          <span className={`status-pill ${getStatusTone(row.status)}`}>{row.status}</span>
+                        </td>
+                        <td className="py-4 pr-3 font-medium text-slate-900">{row.processedMeters.toFixed(2)}</td>
+                        <td className="py-4 pr-3 font-medium text-slate-900">{row.taggas.toFixed(2)}</td>
+                        <td className="py-4 pr-3">
+                          <div className="font-medium text-slate-900">{row.meterRate == null ? "-" : row.meterRate.toFixed(2)}</div>
+                          <div className="mt-1 text-xs text-slate-500">{row.rateStatus.replaceAll("_", " ")}</div>
+                        </td>
+                        <td className="py-4 pr-3 font-semibold text-slate-900">{row.meterAmount.toFixed(2)}</td>
+                        <td className="py-4 pr-3">{row.taggasRate == null ? "-" : row.taggasRate.toFixed(2)}</td>
+                        <td className="py-4 pr-3 font-semibold text-slate-900">{row.taggasAmount.toFixed(2)}</td>
+                        <td className="py-4 pr-3">
+                          {row.paid ? (
+                            <div className="space-y-1">
+                              <div className="font-semibold text-emerald-700">Paid</div>
+                              <div className="text-xs text-slate-500">{row.paidUnit} {row.paidAmount.toFixed(2)}</div>
+                              <div className="text-xs text-slate-500">{toPrintableDate(row.paidAt)}</div>
+                            </div>
+                          ) : (
+                            <div className="text-xs text-slate-500">Unpaid</div>
+                          )}
+                        </td>
+                        <td className="py-4 pr-0">
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              disabled={paymentBusy || row.meterRate == null || row.processedMeters <= 0}
+                              onClick={() => openPayDialog(row, "meters")}
+                            >
+                              Pay meter
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              disabled={paymentBusy || row.taggasRate == null || row.taggas <= 0}
+                              onClick={() => openPayDialog(row, "taggas")}
+                            >
+                              Pay taggas
+                            </button>
+                            {row.paid ? (
+                              <button
+                                type="button"
+                                className="btn-danger"
+                                disabled={paymentBusy}
+                                onClick={() => openClearDialog(row)}
+                              >
+                                Clear
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       </AdminShellCard>
@@ -649,3 +777,9 @@ const AdminBillingPanel = () => {
 };
 
 export default AdminBillingPanel;
+
+
+
+
+
+

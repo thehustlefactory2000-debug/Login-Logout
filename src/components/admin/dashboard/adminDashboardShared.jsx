@@ -78,9 +78,14 @@ export const FOLDING_TYPE_OPTIONS = [
   { value: "double_fold_checking", label: "Double Fold + Checking" },
   { value: "single_fold_cutting", label: "Single Fold + Cutting" },
 ];
+export const STENTER_TYPE_OPTIONS = [
+  { value: "bleach_stenter", label: "Bleach Stenter" },
+  { value: "dyeing_stenter", label: "Dyeing Stenter" },
+];
 
 const STAGE_RATE_OPTION_MAP = {
   bleaching: BLEACH_TYPE_OPTIONS.map((value) => ({ value, label: value })),
+  stenter: STENTER_TYPE_OPTIONS,
   finishing: FINISHING_TYPE_OPTIONS,
   folding: FOLDING_TYPE_OPTIONS,
 };
@@ -118,9 +123,9 @@ export const STAGE_RATE_CONFIG = {
   },
   stenter: {
     label: "Stenter",
-    parameterLabel: "Parameter",
-    parameterOptions: [],
-    getParameterValue: () => "",
+    parameterLabel: "Stenter Type",
+    parameterOptions: STAGE_RATE_OPTION_MAP.stenter,
+    getParameterValue: (lot) => one(lot.stenter)?.stenter_type || "",
     getProcessedMeters: (lot) => {
       const record = one(lot.stenter);
       return n(record?.stentered_meters ?? record?.input_meters);
@@ -168,6 +173,7 @@ export const emptyInstructionEditor = {
   dyeing_locked: false,
   include_stenter: false,
   stenter_locked: false,
+  stenter_type: "",
   include_finishing: false,
   finishing_locked: false,
   finishing_type: "",
@@ -432,6 +438,17 @@ export const ConfirmDialog = ({ title, description, hint, onCancel, onConfirm, c
     </div>
   </div>
 );
+
+
+
+
+
+
+
+
+
+
+
 
 
 

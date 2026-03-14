@@ -5,6 +5,12 @@ import { markStageRecordCompleted, syncLotWorkflowState } from "../../lib/lotWor
 
 const one = (value) => (Array.isArray(value) ? value[0] : value) || null;
 
+const stenterTypeLabel = (value) => {
+  if (value === "bleach_stenter") return "Bleach Stenter";
+  if (value === "dyeing_stenter") return "Dyeing Stenter";
+  return "-";
+};
+
 const StenterStagePanel = () => {
   const [mode, setMode] = useState("list");
   const [rows, setRows] = useState([]);
@@ -14,8 +20,12 @@ const StenterStagePanel = () => {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [bulkSending, setBulkSending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [bulkError, setBulkError] = useState("");
+  const [bulkSuccess, setBulkSuccess] = useState("");
+  const [selectedLotIds, setSelectedLotIds] = useState(() => new Set());
 
   const resetForm = () => {
     setMode("list");
@@ -32,7 +42,7 @@ const StenterStagePanel = () => {
     try {
       const { data, error: listError } = await supabase
         .from("lots")
-        .select("id, lot_no, status, bleaching(bleach_group_no, bleach_type), dyeing(input_meters), stenter(id, input_meters, is_locked)")
+        .select("id, lot_no, status, bleaching(bleach_group_no, bleach_type), dyeing(input_meters), stenter(id, input_meters, stenter_type, is_locked)")
         .eq("status", "active")
         .order("lot_no", { ascending: false });
       if (listError) throw listError;
@@ -71,6 +81,7 @@ const StenterStagePanel = () => {
             meters: stenter?.input_meters,
             bleach: bleaching?.bleach_group_no,
             type: bleaching?.bleach_type,
+            stenterType: stenter?.stenter_type,
           }),
         };
       }),
@@ -79,6 +90,77 @@ const StenterStagePanel = () => {
 
   const filteredRows = useMemo(() => filterIndexedRows(indexedRows, search), [indexedRows, search]);
 
+  useEffect(() => {
+    setSelectedLotIds((prev) => {
+      if (!prev.size) return prev;
+      const allowed = new Set(rows.map((row) => row.id));
+      const next = new Set();
+      prev.forEach((id) => {
+        if (allowed.has(id)) next.add(id);
+      });
+      return next;
+    });
+  }, [rows]);
+
+  const toggleSelect = (lotId) => {
+    setSelectedLotIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(lotId)) next.delete(lotId);
+      else next.add(lotId);
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    setSelectedLotIds(new Set(filteredRows.map((lot) => lot.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedLotIds(new Set());
+  };
+
+  const sendSelected = async () => {
+    if (!selectedLotIds.size) return;
+    const confirmSend = window.confirm(
+      `Mark ${selectedLotIds.size} selected lot${selectedLotIds.size === 1 ? "" : "s"} as completed? This will move them to the next stage.`,
+    );
+    if (!confirmSend) return;
+
+    setBulkSending(true);
+    setBulkError("");
+    setBulkSuccess("");
+
+    let successCount = 0;
+    const failed = [];
+    const selectedLots = rows.filter((lot) => selectedLotIds.has(lot.id));
+
+    for (const lot of selectedLots) {
+      const stenter = one(lot.stenter);
+      if (!stenter?.id) {
+        failed.push(`Lot #${lot.lot_no}: missing stenter record`);
+        continue;
+      }
+      try {
+        await markStageRecordCompleted("stenter", stenter.id);
+        await syncLotWorkflowState(lot.id);
+        successCount += 1;
+      } catch (err) {
+        failed.push(`Lot #${lot.lot_no}: ${err.message || "failed to complete"}`);
+      }
+    }
+
+    if (successCount) {
+      setBulkSuccess(`${successCount} lot${successCount === 1 ? "" : "s"} moved to next stage.`);
+    }
+    if (failed.length) {
+      setBulkError(`Failed for ${failed.length} lot${failed.length === 1 ? "" : "s"}: ${failed.join(" | ")}`);
+    }
+
+    clearSelection();
+    await loadList();
+    setBulkSending(false);
+  };
+
   const openLot = async (lotId) => {
     setLoading(true);
     setError("");
@@ -86,7 +168,7 @@ const StenterStagePanel = () => {
     try {
       const { data: lot, error: lotError } = await supabase
         .from("lots")
-        .select("id, lot_no, status, bleaching(bleach_group_no, bleach_type), dyeing(input_meters), stenter(id, input_meters, is_locked)")
+        .select("id, lot_no, status, bleaching(bleach_group_no, bleach_type), dyeing(input_meters), stenter(id, input_meters, stenter_type, is_locked)")
         .eq("id", lotId)
         .single();
       if (lotError) throw lotError;
@@ -126,11 +208,24 @@ const StenterStagePanel = () => {
       <div className="glass-card p-4 sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-2">
           <h2 className="text-xl surface-title">Stenter Dashboard</h2>
-          <button type="button" onClick={loadList} disabled={loading} className="btn-secondary btn-sm disabled:opacity-60">
-            {loading ? "Refreshing..." : "Refresh"}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={loadList} disabled={loading} className="btn-secondary btn-sm disabled:opacity-60">
+              {loading ? "Refreshing..." : "Refresh"}
+            </button>
+            <button type="button" onClick={selectAllVisible} disabled={!filteredRows.length} className="btn-secondary btn-sm disabled:opacity-60">
+              Select All
+            </button>
+            <button type="button" onClick={clearSelection} disabled={!selectedLotIds.size} className="btn-secondary btn-sm disabled:opacity-60">
+              Clear
+            </button>
+            <button type="button" onClick={sendSelected} disabled={!selectedLotIds.size || bulkSending} className="btn-dark btn-sm disabled:opacity-60">
+              {bulkSending ? "Sending..." : `Send Selected (${selectedLotIds.size})`}
+            </button>
+          </div>
         </div>
         {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+        {bulkError && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{bulkError}</div>}
+        {bulkSuccess && <div className="mb-4 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">{bulkSuccess}</div>}
         <div className="mb-3">
           <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search (e.g. lot:120, bleach:5, meters:490)" className="w-full rounded-xl glass-input px-3 py-2 text-sm outline-none sm:max-w-md" />
         </div>
@@ -139,10 +234,19 @@ const StenterStagePanel = () => {
             {filteredRows.map((lot) => {
               const bleaching = one(lot.bleaching);
               const stenter = one(lot.stenter);
+              const isSelected = selectedLotIds.has(lot.id);
               return (
                 <div key={lot.id} className="rounded-xl border border-slate-200/80 bg-white/70 p-3 text-sm shadow-sm">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="font-semibold text-gray-900">Lot #{lot.lot_no}</p>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSelect(lot.id)}
+                        className="h-4 w-4"
+                      />
+                      <p className="font-semibold text-gray-900">Lot #{lot.lot_no}</p>
+                    </label>
                     <button type="button" onClick={() => openLot(lot.id)} className="btn-dark btn-sm">Open</button>
                   </div>
                   <p>Bleached No: {bleaching?.bleach_group_no ?? "-"}</p>
@@ -184,3 +288,9 @@ const StenterStagePanel = () => {
 };
 
 export default StenterStagePanel;
+
+
+
+
+
+

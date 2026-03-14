@@ -4,6 +4,7 @@ import {
   BLEACH_TYPE_OPTIONS,
   FINISHING_TYPE_OPTIONS,
   FOLDING_TYPE_OPTIONS,
+  STENTER_TYPE_OPTIONS,
   FilterLabel,
   INSTRUCTION_STAGE_CARDS,
   InstructionStageCard,
@@ -111,6 +112,23 @@ const AdminInstructionsPanel = ({
                       Planned Input Meters: {instructionEditor.checkedMeters || "-"}
                     </p>
                   )}
+                  {stage.key === "stenter" && (
+                    <FilterLabel label="Stenter Type">
+                      <select
+                        value={instructionEditor.stenter_type}
+                        onChange={(e) => onInstructionFieldChange("stenter_type", e.target.value)}
+                        className="glass-input w-full px-3 py-2 text-sm text-slate-900 outline-none"
+                        disabled={instructionEditor.stenter_locked}
+                      >
+                        <option value="">Select Stenter Type</option>
+                        {STENTER_TYPE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </FilterLabel>
+                  )}
                   {stage.key === "finishing" && (
                     <FilterLabel label="Finishing Type">
                       <select
@@ -209,3 +227,7 @@ const AdminInstructionsPanel = ({
 );
 
 export default AdminInstructionsPanel;
+
+
+
+

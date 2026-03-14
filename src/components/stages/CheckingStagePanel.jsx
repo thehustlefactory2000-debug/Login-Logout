@@ -52,6 +52,11 @@ const FOLDING_TYPE_OPTIONS = [
   { value: "single_fold_cutting", label: "Single Fold + Cutting" },
 ];
 
+const STENTER_TYPE_OPTIONS = [
+  { value: "bleach_stenter", label: "Bleach Stenter" },
+  { value: "dyeing_stenter", label: "Dyeing Stenter" },
+];
+
 const STAGE_CARD_CONFIG = [
   { key: "bleaching", label: "Bleaching" },
   { key: "masrise", label: "Masrise" },
@@ -221,6 +226,13 @@ const CheckingStagePanel = ({ userId }) => {
     () => STAGE_CARD_CONFIG.filter((stage) => form[`include_${stage.key}`]).map((stage) => stage.label),
     [form],
   );
+  const canRelease = Boolean(
+    selectedLotId &&
+    recordId &&
+    selectedStages.length > 0 &&
+    !recordLocked &&
+    !sending,
+  );
 
   const calculatedLessShortMeters = useMemo(() => {
     const inwardMeters = Number(inward?.meters ?? "");
@@ -262,11 +274,7 @@ const CheckingStagePanel = ({ userId }) => {
       if (!nextSelected) {
         if (stageKey === "bleaching") next.bleach_type = "";
         if (stageKey === "masrise") next.masrise_instruction = "";
-        if (stageKey === "finishing") {
-          next.finishing_type = "";
-          next.include_folding = false;
-          next.folding_type = "";
-        }
+        if (stageKey === "finishing") next.finishing_type = "";
         if (stageKey === "folding") next.folding_type = "";
       }
 
@@ -329,7 +337,7 @@ const CheckingStagePanel = ({ userId }) => {
     try {
       const { data: lot, error: lotError } = await supabase
         .from("lots")
-        .select("id, lot_no, cloth_type, current_stage, status, party:party_id(name), grey_party:grey_party_id(name), grey_inward!inner(meters, jodis, length, width, quantity, tagge, fold_details, border), bleaching(id, bleach_type, next_stage, is_locked), masrise(id, instruction, is_locked), dyeing(id, is_locked), stenter(id, is_locked), finishing(id, finishing_type, is_locked), folding(id, folding_type, is_locked)")
+        .select("id, lot_no, cloth_type, current_stage, status, party:party_id(name), grey_party:grey_party_id(name), grey_inward!inner(meters, jodis, length, width, quantity, tagge, fold_details, border), bleaching(id, bleach_type, next_stage, is_locked), masrise(id, instruction, is_locked), dyeing(id, is_locked), stenter(id, is_locked, stenter_type), finishing(id, finishing_type, is_locked), folding(id, folding_type, is_locked)")
         .eq("id", lotId)
         .single();
 
@@ -422,7 +430,6 @@ const CheckingStagePanel = ({ userId }) => {
     }
     if (bleachingRequired && !form.bleach_type) throw new Error("Bleach type is required.");
     if (finishingRequired && !form.finishing_type) throw new Error("Finishing type is required.");
-    if (foldingRequired && !finishingRequired) throw new Error("Folding requires finishing.");
     if (foldingRequired && !form.folding_type) throw new Error("Folding type is required.");
 
     if (bleachingRequired && bleaching?.id && !bleaching.is_locked) {
@@ -664,6 +671,7 @@ const CheckingStagePanel = ({ userId }) => {
 
     if (!lotData?.id) return setError("Open a lot first.");
     if (!recordId) return setError("Save checking data first.");
+    if (!selectedStages.length) return setError("Select at least one downstream stage.");
 
     setSending(true);
     try {
@@ -1012,6 +1020,20 @@ const CheckingStagePanel = ({ userId }) => {
                 disabled={recordLocked || sending}
               >
                 <p className="rounded-xl bg-white/10 px-3 py-2 text-sm text-slate-100">Planned Input Meters: {form.checked_meters || "-"}</p>
+                <label className="block text-sm">
+                  <span className="mb-1 block text-slate-200">Stenter Type</span>
+                  <select
+                    value={form.stenter_type}
+                    onChange={(e) => setField("stenter_type", e.target.value)}
+                    className="w-full rounded-xl border border-white/20 bg-white/95 px-3 py-2 text-slate-900 outline-none"
+                    disabled={recordLocked || sending}
+                  >
+                    <option value="">Select Stenter Type</option>
+                    {STENTER_TYPE_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </label>
               </StageCard>
 
               <StageCard
@@ -1054,7 +1076,6 @@ const CheckingStagePanel = ({ userId }) => {
                     {FOLDING_TYPE_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                   </select>
                 </label>
-                {!form.include_finishing ? <p className="text-xs text-amber-200">Folding requires Finishing to be selected before release.</p> : null}
               </StageCard>
             </div>
           </div>
@@ -1063,7 +1084,7 @@ const CheckingStagePanel = ({ userId }) => {
             <button type="submit" disabled={saving || recordLocked || sending} className="btn-primary disabled:opacity-60">
               {saving ? "Saving..." : "Save"}
             </button>
-            <button type="button" onClick={sendToNextStage} disabled={sending || recordLocked || !selectedLotId} className="btn-dark disabled:opacity-60">
+            <button type="button" onClick={sendToNextStage} disabled={!canRelease} className="btn-dark disabled:opacity-60">
               {sending ? "Releasing..." : "Release To Selected Stages"}
             </button>
           </div>
@@ -1074,3 +1095,11 @@ const CheckingStagePanel = ({ userId }) => {
 };
 
 export default CheckingStagePanel;
+
+
+
+
+
+
+
+

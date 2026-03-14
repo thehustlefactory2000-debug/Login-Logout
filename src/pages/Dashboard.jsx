@@ -81,6 +81,7 @@ const Dashboard = () => {
               setSelectedGreyLotId(lotId);
               setGreyInwardMode("entry");
             }}
+            userId={user?.id}
           />
         )}
 

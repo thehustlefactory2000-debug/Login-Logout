@@ -271,47 +271,83 @@ const AdminRatesPanel = () => {
             description="Review, edit, or delete the saved dual-rate rows that billing will use."
             action={<button type="button" onClick={loadRates} className="btn-secondary">Refresh</button>}
           />
-          <div className="overflow-x-auto p-4 sm:p-6">
+          <div className="p-4 sm:p-6">
             {loading ? (
               <p className="text-sm text-slate-500">Loading rates...</p>
             ) : rows.length === 0 ? (
               <p className="text-sm text-slate-500">No stage rates configured yet.</p>
             ) : (
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">
-                    <th className="py-3 pr-3">Stage</th>
-                    <th className="py-3 pr-3">Parameter</th>
-                    <th className="py-3 pr-3">Meter Rate</th>
-                    <th className="py-3 pr-3">Taggas Rate</th>
-                    <th className="py-3 pr-3">Status</th>
-                    <th className="py-3 pr-0">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <>
+                <div className="space-y-3 md:hidden">
                   {rows.map((row) => (
-                    <tr key={row.id} className="border-b border-slate-100 text-slate-700">
-                      <td className="py-4 pr-3 font-semibold text-slate-900">{stageLabel(row.stage)}</td>
-                      <td className="py-4 pr-3">{formatStageParameter(row.stage, row.parameter_value)}</td>
-                      <td className="py-4 pr-3">{formatRate(row.meter_rate)}</td>
-                      <td className="py-4 pr-3">{formatRate(row.taggas_rate)}</td>
-                      <td className="py-4 pr-3">
-                        <span className={`status-pill ${row.is_active ? "success" : "warn"}`}>{row.is_active ? "active" : "inactive"}</span>
-                      </td>
-                      <td className="py-4 pr-0">
-                        <div className="flex flex-wrap gap-2">
-                          <button type="button" onClick={() => editRow(row)} className="btn-secondary btn-sm">
-                            Edit
-                          </button>
-                          <button type="button" onClick={() => deleteRow(row)} disabled={deletingId === row.id} className="btn-danger btn-sm disabled:opacity-60">
-                            {deletingId === row.id ? "Deleting..." : "Delete"}
-                          </button>
+                    <div key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Stage</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">{stageLabel(row.stage)}</p>
+                          <p className="mt-1 text-xs text-slate-500">{formatStageParameter(row.stage, row.parameter_value)}</p>
                         </div>
-                      </td>
-                    </tr>
+                        <span className={`status-pill ${row.is_active ? "success" : "warn"}`}>{row.is_active ? "active" : "inactive"}</span>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-600">
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Meter Rate</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">{formatRate(row.meter_rate)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Taggas Rate</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">{formatRate(row.taggas_rate)}</p>
+                        </div>
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button type="button" onClick={() => editRow(row)} className="btn-secondary btn-sm">
+                          Edit
+                        </button>
+                        <button type="button" onClick={() => deleteRow(row)} disabled={deletingId === row.id} className="btn-danger btn-sm disabled:opacity-60">
+                          {deletingId === row.id ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-[0.1em] text-slate-500">
+                        <th className="py-3 pr-3">Stage</th>
+                        <th className="py-3 pr-3">Parameter</th>
+                        <th className="py-3 pr-3">Meter Rate</th>
+                        <th className="py-3 pr-3">Taggas Rate</th>
+                        <th className="py-3 pr-3">Status</th>
+                        <th className="py-3 pr-0">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => (
+                        <tr key={row.id} className="border-b border-slate-100 text-slate-700">
+                          <td className="py-4 pr-3 font-semibold text-slate-900">{stageLabel(row.stage)}</td>
+                          <td className="py-4 pr-3">{formatStageParameter(row.stage, row.parameter_value)}</td>
+                          <td className="py-4 pr-3">{formatRate(row.meter_rate)}</td>
+                          <td className="py-4 pr-3">{formatRate(row.taggas_rate)}</td>
+                          <td className="py-4 pr-3">
+                            <span className={`status-pill ${row.is_active ? "success" : "warn"}`}>{row.is_active ? "active" : "inactive"}</span>
+                          </td>
+                          <td className="py-4 pr-0">
+                            <div className="flex flex-wrap gap-2">
+                              <button type="button" onClick={() => editRow(row)} className="btn-secondary btn-sm">
+                                Edit
+                              </button>
+                              <button type="button" onClick={() => deleteRow(row)} disabled={deletingId === row.id} className="btn-danger btn-sm disabled:opacity-60">
+                                {deletingId === row.id ? "Deleting..." : "Delete"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         </AdminShellCard>
@@ -321,3 +357,5 @@ const AdminRatesPanel = () => {
 };
 
 export default AdminRatesPanel;
+
+

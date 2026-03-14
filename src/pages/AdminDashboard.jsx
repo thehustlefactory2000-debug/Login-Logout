@@ -99,7 +99,7 @@ const AdminDashboard = () => {
     let query = supabase
       .from("lots")
       .select(
-        "id, lot_no, cloth_type, current_stage, status, created_at, party:party_id(name), grey_party:grey_party_id(name), grey_inward(meters), grey_checking(checked_meters, checked_length, jodis, taggas), bleaching(bleach_group_no, bleach_type, input_meters, output_meters, is_locked), masrise(input_meters, completed_meters, is_locked), dyeing(input_meters, dyed_meters, is_locked), stenter(input_meters, stentered_meters, is_locked), finishing(input_meters, finished_meters, finishing_type, is_locked), folding(input_meters, worker_name, folding_type, is_locked)",
+        "id, lot_no, cloth_type, current_stage, status, created_at, party:party_id(name), grey_party:grey_party_id(name), grey_inward(meters), grey_checking(checked_meters, checked_length, jodis, taggas), bleaching(bleach_group_no, bleach_type, input_meters, output_meters, is_locked), masrise(input_meters, completed_meters, is_locked), dyeing(input_meters, dyed_meters, is_locked), stenter(input_meters, stentered_meters, stenter_type, is_locked), finishing(input_meters, finished_meters, finishing_type, is_locked), folding(input_meters, worker_name, folding_type, is_locked)",
       )
       .order("created_at", { ascending: false });
 
@@ -406,7 +406,7 @@ const AdminDashboard = () => {
     try {
       const { data: lot, error: lotError } = await supabase
         .from("lots")
-        .select("id, lot_no, current_stage, status, grey_checking(checked_meters, checked_length, jodis), bleaching(id, bleach_type, next_stage, input_meters, is_locked), masrise(id, instruction, input_meters, is_locked), dyeing(id, input_meters, is_locked), stenter(id, input_meters, is_locked), finishing(id, input_meters, finishing_type, is_locked), folding(id, input_meters, folding_type, is_locked)")
+        .select("id, lot_no, current_stage, status, grey_checking(checked_meters, checked_length, jodis), bleaching(id, bleach_type, next_stage, input_meters, is_locked), masrise(id, instruction, input_meters, is_locked), dyeing(id, input_meters, is_locked), stenter(id, input_meters, stenter_type, is_locked), finishing(id, input_meters, finishing_type, is_locked), folding(id, input_meters, folding_type, is_locked)")
         .eq("id", lotId)
         .single();
 
@@ -438,6 +438,7 @@ const AdminDashboard = () => {
         dyeing_locked: Boolean(dyeing?.is_locked),
         include_stenter: Boolean(stenter?.id),
         stenter_locked: Boolean(stenter?.is_locked),
+        stenter_type: stenter?.stenter_type || "",
         include_finishing: Boolean(finishing?.id),
         finishing_locked: Boolean(finishing?.is_locked),
         finishing_type: finishing?.finishing_type || "",
@@ -754,3 +755,9 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+
+
+
+
+
+
