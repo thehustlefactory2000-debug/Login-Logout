@@ -14,6 +14,8 @@ const calculateMeters = (jodisValue, lengthValue) => {
 const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) => {
   const todayIso = new Date().toISOString().slice(0, 10);
   const [partyName, setPartyName] = useState("");
+  const [partyPhone, setPartyPhone] = useState("");
+  const [partyPhoneEdited, setPartyPhoneEdited] = useState(false);
   const [greyPartyName, setGreyPartyName] = useState("");
   const [clothType, setClothType] = useState("");
   const [entryDate, setEntryDate] = useState(todayIso);
@@ -75,7 +77,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 
     const { data: inward, error: inwardError } = await supabase
       .from("grey_inward")
-      .select("id, entry_date, meters, jodis, length, width, quantity, tagge, fold_details, border, is_locked")
+      .select("id, entry_date, meters, jodis, length, width, quantity, tagge, fold_details, border, party_phone, is_locked")
       .eq("lot_id", lotId)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -156,6 +158,11 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
     setMeters(calculatedMeters);
   }, [jodis, length]);
 
+  useEffect(() => {
+    if (!partyName.trim() || partyPhoneEdited) return;
+    fetchPartyPhone(partyName).catch(() => {});
+  }, [partyName, partyPhoneEdited]);
+
   const searchParty = async (value, type, setter) => {
     let query = supabase
       .from("parties")
@@ -229,6 +236,39 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
       throw insertError;
     }
     return created.id;
+  };
+
+  const fetchPartyPhone = async (name) => {
+    const cleanName = name.trim();
+    if (!cleanName) return;
+    const { data: party, error: partyError } = await supabase
+      .from("parties")
+      .select("id")
+      .eq("name", cleanName)
+      .eq("type", "party")
+      .maybeSingle();
+    if (partyError) throw partyError;
+    if (!party?.id) return;
+
+    const { data: lot, error: lotError } = await supabase
+      .from("lots")
+      .select("id, created_at")
+      .eq("party_id", party.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (lotError) throw lotError;
+    if (!lot?.id) return;
+
+    const { data: inward, error: inwardError } = await supabase
+      .from("grey_inward")
+      .select("party_phone")
+      .eq("lot_id", lot.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (inwardError) throw inwardError;
+    if (inward?.party_phone) setPartyPhone(inward.party_phone);
   };
 
   const findOrCreateClothType = async (name) => {
@@ -371,6 +411,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
       const payload = {
         lot_id: lotId,
         entry_date: entryDate,
+        party_phone: partyPhone.trim() || null,
         meters: calculatedMeters === "" ? (meters === "" ? null : Number(meters)) : Number(calculatedMeters),
         jodis: jodis === "" ? null : Number(jodis),
         length: length === "" ? null : Number(length),
@@ -400,6 +441,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
           .from("grey_inward")
           .update({
             entry_date: payload.entry_date,
+            party_phone: payload.party_phone,
             meters: payload.meters,
             jodis: payload.jodis,
             length: payload.length,
@@ -475,8 +517,15 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
             list="party-suggestions"
             value={partyName}
             onChange={(e) => {
-              setPartyName(e.target.value);
-              searchParty(e.target.value, "party", setPartySuggestions);
+              const nextValue = e.target.value;
+              setPartyName(nextValue);
+              if (!nextValue.trim()) {
+                setPartyPhone("");
+                setPartyPhoneEdited(false);
+              } else {
+                setPartyPhoneEdited(false);
+              }
+              searchParty(nextValue, "party", setPartySuggestions);
             }}
             onFocus={() => searchParty("", "party", setPartySuggestions)}
             className="w-full px-3 py-2 rounded-xl glass-input outline-none"
@@ -486,6 +535,22 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
           <datalist id="party-suggestions">
             {partySuggestions.map((name) => <option key={name} value={name} />)}
           </datalist>
+        </label>
+
+        <label className="text-sm">
+          <span className="block mb-1 text-gray-700">Party Phone</span>
+          <input
+            type="tel"
+            value={partyPhone}
+            onChange={(e) => {
+              setPartyPhone(e.target.value);
+              setPartyPhoneEdited(true);
+            }}
+            placeholder="e.g. 919876543210"
+            className="w-full px-3 py-2 rounded-xl glass-input outline-none"
+            disabled={disabled}
+          />
+          <span className="mt-1 block text-xs text-gray-500">Include country code for WhatsApp.</span>
         </label>
 
         <label className="text-sm">
@@ -646,6 +711,30 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 };
 
 export default GreyInwardEntryForm;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

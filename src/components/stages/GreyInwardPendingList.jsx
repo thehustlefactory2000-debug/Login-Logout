@@ -1,6 +1,26 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { buildSearchIndex, filterIndexedRows } from "../../lib/stageSearch";
+const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
+
+const buildWhatsAppUrl = (phone, message) => {
+  const digits = normalizePhone(phone);
+  if (!digits) return "";
+  return `https://api.whatsapp.com/send?phone=${digits}&text=${encodeURIComponent(message)}`;
+};
+
+const buildWhatsAppMessage = (lot) => {
+  const lotNo = lot?.lot_no ?? "-";
+  const clothType = lot?.cloth_type || "-";
+  return [
+    "Lot Created Successfully",
+    "",
+    `• Lot No: ${lotNo}`,
+    `• Cloth Type: ${clothType}`,
+    "",
+    "Please use this Lot No for future reference.",
+  ].join("\n");
+};
 
 const GreyInwardPendingList = ({ onCreateNew, onOpenLot, userId }) => {
   const [rows, setRows] = useState([]);
@@ -19,7 +39,7 @@ const GreyInwardPendingList = ({ onCreateNew, onOpenLot, userId }) => {
       const { data, error: fetchError } = await supabase
         .from("lots")
         .select(
-          "id, lot_no, cloth_type, created_at, party:party_id(name), grey_party:grey_party_id(name), grey_inward!inner(meters, jodis, length, width, quantity, tagge, is_locked, created_at)",
+          "id, lot_no, cloth_type, created_at, party:party_id(name), grey_party:grey_party_id(name), grey_inward!inner(meters, jodis, length, width, quantity, tagge, party_phone, is_locked, created_at)",
         )
         .eq("current_stage", "grey_inward")
         .eq("status", "active")
@@ -227,6 +247,7 @@ const GreyInwardPendingList = ({ onCreateNew, onOpenLot, userId }) => {
             const inward = Array.isArray(lot.grey_inward) ? lot.grey_inward[0] : lot.grey_inward;
             const isLocked = Boolean(inward?.is_locked);
             const isSelected = selectedLotIds.has(lot.id);
+            const whatsappUrl = buildWhatsAppUrl(inward?.party_phone, buildWhatsAppMessage(lot));
             return (
               <div key={lot.id} className="rounded-xl border border-slate-200/80 bg-white/70 p-3 text-sm shadow-sm">
                 <div className="flex items-center justify-between gap-2">
@@ -240,15 +261,31 @@ const GreyInwardPendingList = ({ onCreateNew, onOpenLot, userId }) => {
                     />
                     <p className="font-semibold text-gray-900">Lot #{lot.lot_no}</p>
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => onOpenLot?.(lot.id)}
-                    className="btn-dark btn-sm"
-                  >
-                    Open
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onOpenLot?.(lot.id)}
+                      className="btn-dark btn-sm"
+                    >
+                      Open
+                    </button>
+                    {whatsappUrl ? (
+                      <a href={whatsappUrl} target="_self" className="btn-secondary btn-sm">
+                        WhatsApp
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled
+                        className="btn-secondary btn-sm disabled:opacity-60"
+                      >
+                        WhatsApp
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <p>Party: {lot.party?.name || "-"}</p>
+                <p>Party Phone: {inward?.party_phone || "-"}</p>
                 <p>Grey Party: {lot.grey_party?.name || "-"}</p>
                 <p>Cloth: {lot.cloth_type || "-"}</p>
                 <p>Meters: {inward?.meters ?? "-"}</p>
@@ -270,6 +307,15 @@ const GreyInwardPendingList = ({ onCreateNew, onOpenLot, userId }) => {
 };
 
 export default GreyInwardPendingList;
+
+
+
+
+
+
+
+
+
 
 
 
