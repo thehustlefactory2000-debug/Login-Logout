@@ -28,7 +28,13 @@ const parseOptionalRate = (value) => {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : Number.NaN;
 };
 
-const formatRate = (value) => (value == null ? "-" : Number(value).toFixed(2));
+const formatRate = (value) => {
+  if (value == null) return "-";
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return String(value);
+  const fixed = numericValue.toFixed(6);
+  return fixed.replace(/\.?0+$/, "");
+};
 
 const AdminRatesPanel = () => {
   const [rows, setRows] = useState([]);
@@ -227,7 +233,7 @@ const AdminRatesPanel = () => {
                 <input
                   type="number"
                   min="0"
-                  step="0.01"
+                  step="0.000001"
                   value={form.meterRate}
                   onChange={(e) => setField("meterRate", e.target.value)}
                   className="glass-input w-full px-3 py-2 text-sm outline-none"
@@ -239,7 +245,7 @@ const AdminRatesPanel = () => {
                 <input
                   type="number"
                   min="0"
-                  step="0.01"
+                  step="0.000001"
                   value={form.taggasRate}
                   onChange={(e) => setField("taggasRate", e.target.value)}
                   className="glass-input w-full px-3 py-2 text-sm outline-none"
@@ -357,5 +363,6 @@ const AdminRatesPanel = () => {
 };
 
 export default AdminRatesPanel;
+
 
 

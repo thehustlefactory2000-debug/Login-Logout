@@ -1,6 +1,16 @@
 import React from "react";
-import { STAGE_LABELS } from "../../../constants/workflow";
+import { STAGE_LABELS, STAGE_OPTIONS } from "../../../constants/workflow";
 
+const STAGE_BADGE_LABELS = {
+  grey_inward: "GI",
+  checking: "CHK",
+  bleaching: "BL",
+  masrise: "MS",
+  dyeing: "DY",
+  stenter: "ST",
+  finishing: "FN",
+  folding: "FD",
+};
 export const ROLE_OPTIONS = ["admin", "staff"];
 export const ADMIN_TABS = [
   { key: "roles", label: "Assign Role" },
@@ -163,6 +173,19 @@ export const emptyInstructionEditor = {
   checkedMeters: "",
   checkedLength: "",
   checkedJodis: "",
+  partyName: "",
+  greyPartyName: "",
+  clothType: "",
+  entryDate: "",
+  partyPhone: "",
+  inwardMeters: "",
+  inwardJodis: "",
+  inwardLength: "",
+  inwardWidth: "",
+  inwardQuantity: "",
+  inwardTagge: "",
+  inwardFoldDetails: "",
+  inwardBorder: "",
   include_bleaching: false,
   bleach_locked: false,
   bleach_type: "",
@@ -186,6 +209,24 @@ export const one = (value) => (Array.isArray(value) ? value[0] : value) || null;
 
 const n = (value) => (typeof value === "number" ? value : Number(value || 0));
 
+
+export const getLotStageProgress = (lot) => {
+  const progress = [];
+  for (const stage of STAGE_OPTIONS) {
+    const record = stage === "grey_inward"
+      ? one(lot.grey_inward)
+      : stage === "checking"
+        ? one(lot.grey_checking)
+        : one(lot[stage]);
+    progress.push({
+      stage,
+      label: STAGE_LABELS[stage] || stage,
+      shortLabel: STAGE_BADGE_LABELS[stage] || stage.slice(0, 2).toUpperCase(),
+      done: Boolean(record?.id || record),
+    });
+  }
+  return progress;
+};
 export const stageLabel = (stage) => STAGE_LABELS[stage] || stage || "-";
 export const normalizeStageParameter = (value) => (value == null ? "" : String(value));
 
@@ -438,6 +479,8 @@ export const ConfirmDialog = ({ title, description, hint, onCancel, onConfirm, c
     </div>
   </div>
 );
+
+
 
 
 

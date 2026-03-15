@@ -63,7 +63,28 @@ const AdminInstructionsPanel = ({
           <MetricCard label="Checked Meters" value={instructionEditor.checkedMeters || "-"} tone="emerald" />
           <MetricCard label="Length / Jodis" value={`${instructionEditor.checkedLength || "-"} / ${instructionEditor.checkedJodis || "-"}`} tone="amber" />
         </div>
-
+        <AdminShellCard>
+          <PanelHeader
+            eyebrow="Grey Inward"
+            title="Lot intake details"
+            description="Details captured during grey inward entry for this lot."
+          />
+          <div className="grid gap-2 p-4 text-xs text-slate-600 sm:grid-cols-2 lg:grid-cols-3">
+            <p className="rounded-xl bg-slate-50 px-3 py-2">Party: {instructionEditor.partyName || "-"}</p>
+            <p className="rounded-xl bg-slate-50 px-3 py-2">Grey Party: {instructionEditor.greyPartyName || "-"}</p>
+            <p className="rounded-xl bg-slate-50 px-3 py-2">Cloth Type: {instructionEditor.clothType || "-"}</p>
+            <p className="rounded-xl bg-slate-50 px-3 py-2">Entry Date: {instructionEditor.entryDate || "-"}</p>
+            <p className="rounded-xl bg-slate-50 px-3 py-2">Party Phone: {instructionEditor.partyPhone || "-"}</p>
+            <p className="rounded-xl bg-slate-50 px-3 py-2">Meters: {instructionEditor.inwardMeters || "-"}</p>
+            <p className="rounded-xl bg-slate-50 px-3 py-2">Jodis: {instructionEditor.inwardJodis || "-"}</p>
+            <p className="rounded-xl bg-slate-50 px-3 py-2">Length: {instructionEditor.inwardLength || "-"}</p>
+            <p className="rounded-xl bg-slate-50 px-3 py-2">Width: {instructionEditor.inwardWidth || "-"}</p>
+            <p className="rounded-xl bg-slate-50 px-3 py-2">Quality: {instructionEditor.inwardQuantity || "-"}</p>
+            <p className="rounded-xl bg-slate-50 px-3 py-2">Tagge: {instructionEditor.inwardTagge || "-"}</p>
+            <p className="rounded-xl bg-slate-50 px-3 py-2">Fold Details: {instructionEditor.inwardFoldDetails || "-"}</p>
+            <p className="rounded-xl bg-slate-50 px-3 py-2">Border: {instructionEditor.inwardBorder || "-"}</p>
+          </div>
+        </AdminShellCard>
         <AdminShellCard>
           <PanelHeader eyebrow="Stage Planner" title="Stage instructions" description="Completed stages stay locked. All other selected stages will be inserted, updated, or removed when you save." />
           <div className="grid grid-cols-1 gap-3 p-4 sm:p-6 lg:grid-cols-2">
@@ -227,6 +248,7 @@ const AdminInstructionsPanel = ({
 );
 
 export default AdminInstructionsPanel;
+
 
 
 

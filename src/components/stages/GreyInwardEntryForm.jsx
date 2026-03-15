@@ -44,6 +44,8 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
   const [currentLotNo, setCurrentLotNo] = useState(null);
   const [nextLotNo, setNextLotNo] = useState(null);
   const [isLocked, setIsLocked] = useState(false);
+  const [savedLotModalOpen, setSavedLotModalOpen] = useState(false);
+  const [savedLotNo, setSavedLotNo] = useState(null);
 
   const loadClothTypes = async () => {
     const { data } = await supabase
@@ -462,6 +464,8 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
 
       setCurrentLotId(lotId);
       setCurrentLotNo(lotNo);
+      setSavedLotNo(lotNo);
+      setSavedLotModalOpen(true);
       await loadNextLotNo();
       setSuccess(`Saved. Lot No: ${lotNo}. You can edit and save again until you send to checking.`);
       await loadClothTypes();
@@ -504,7 +508,7 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
     <div className="glass-card p-4 sm:p-6">
       <h2 className="text-xl surface-title mb-2">Grey Inward Entry</h2>
       <p className="text-sm text-gray-600 mb-4">
-        Lot No: <span className="font-semibold">{currentLotNo ?? nextLotNo ?? "Loading..."}</span>
+        Lot No: <span className="font-semibold">{currentLotNo ?? "-"}</span>
       </p>
 
       {error && <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">{error}</div>}
@@ -706,6 +710,26 @@ const GreyInwardEntryForm = ({ userId, onSaved, onSent, initialLotId = null }) =
           )}
         </div>
       </form>
+
+      {savedLotModalOpen && savedLotNo != null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold text-slate-900">Lot Created</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Actual Lot No: <span className="font-semibold text-slate-900">#{savedLotNo}</span>
+            </p>
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                className="btn-dark"
+                onClick={() => setSavedLotModalOpen(false)}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

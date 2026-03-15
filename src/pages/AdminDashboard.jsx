@@ -99,7 +99,7 @@ const AdminDashboard = () => {
     let query = supabase
       .from("lots")
       .select(
-        "id, lot_no, cloth_type, current_stage, status, created_at, party:party_id(name), grey_party:grey_party_id(name), grey_inward(meters), grey_checking(checked_meters, checked_length, jodis, taggas), bleaching(bleach_group_no, bleach_type, input_meters, output_meters, is_locked), masrise(input_meters, completed_meters, is_locked), dyeing(input_meters, dyed_meters, is_locked), stenter(input_meters, stentered_meters, stenter_type, is_locked), finishing(input_meters, finished_meters, finishing_type, is_locked), folding(input_meters, worker_name, folding_type, is_locked)",
+        "id, lot_no, cloth_type, entry_date, current_stage, status, created_at, party:party_id(name), grey_party:grey_party_id(name), grey_inward(id, entry_date, meters, jodis, length, width, quantity, tagge, fold_details, border, party_phone), grey_checking(id, checked_meters, checked_length, jodis, taggas), bleaching(id, bleach_group_no, bleach_type, input_meters, output_meters, is_locked), masrise(id, input_meters, completed_meters, is_locked), dyeing(id, input_meters, dyed_meters, is_locked), stenter(id, input_meters, stentered_meters, stenter_type, is_locked), finishing(id, input_meters, finished_meters, finishing_type, is_locked), folding(id, input_meters, worker_name, folding_type, is_locked)",
       )
       .order("created_at", { ascending: false });
 
@@ -406,13 +406,14 @@ const AdminDashboard = () => {
     try {
       const { data: lot, error: lotError } = await supabase
         .from("lots")
-        .select("id, lot_no, current_stage, status, grey_checking(checked_meters, checked_length, jodis), bleaching(id, bleach_type, next_stage, input_meters, is_locked), masrise(id, instruction, input_meters, is_locked), dyeing(id, input_meters, is_locked), stenter(id, input_meters, stenter_type, is_locked), finishing(id, input_meters, finishing_type, is_locked), folding(id, input_meters, folding_type, is_locked)")
+        .select("id, lot_no, cloth_type, entry_date, current_stage, status, party:party_id(name), grey_party:grey_party_id(name), grey_inward(id, entry_date, meters, jodis, length, width, quantity, tagge, fold_details, border, party_phone), grey_checking(checked_meters, checked_length, jodis), bleaching(id, bleach_type, next_stage, input_meters, is_locked), masrise(id, instruction, input_meters, is_locked), dyeing(id, input_meters, is_locked), stenter(id, input_meters, stenter_type, is_locked), finishing(id, input_meters, finishing_type, is_locked), folding(id, input_meters, folding_type, is_locked)")
         .eq("id", lotId)
         .single();
 
       if (lotError) throw lotError;
 
       const checking = one(lot.grey_checking);
+      const inward = one(lot.grey_inward);
       const bleaching = one(lot.bleaching);
       const masrise = one(lot.masrise);
       const dyeing = one(lot.dyeing);
@@ -428,6 +429,19 @@ const AdminDashboard = () => {
         checkedMeters: checking?.checked_meters ?? "",
         checkedLength: checking?.checked_length ?? "",
         checkedJodis: checking?.jodis ?? "",
+        partyName: lot.party?.name || "",
+        greyPartyName: lot.grey_party?.name || "",
+        clothType: lot.cloth_type || "",
+        entryDate: inward?.entry_date || lot.entry_date || "",
+        partyPhone: inward?.party_phone || "",
+        inwardMeters: inward?.meters ?? "",
+        inwardJodis: inward?.jodis ?? "",
+        inwardLength: inward?.length ?? "",
+        inwardWidth: inward?.width ?? "",
+        inwardQuantity: inward?.quantity ?? "",
+        inwardTagge: inward?.tagge ?? "",
+        inwardFoldDetails: inward?.fold_details ?? "",
+        inwardBorder: inward?.border ?? "",
         include_bleaching: Boolean(bleaching?.id),
         bleach_locked: Boolean(bleaching?.is_locked),
         bleach_type: bleaching?.bleach_type || "",
@@ -755,6 +769,12 @@ const AdminDashboard = () => {
 };
 
 export default AdminDashboard;
+
+
+
+
+
+
 
 
 

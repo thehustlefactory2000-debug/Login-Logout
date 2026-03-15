@@ -6,9 +6,25 @@ import {
   MetricCard,
   PanelHeader,
   getStatusTone,
+  getLotStageProgress,
   stageLabel,
   toPrintableDate,
 } from "./adminDashboardShared";
+
+const renderStageProgress = (lot) => (
+  <div className="flex flex-wrap gap-1">
+    {getLotStageProgress(lot).map((stage) => (
+      <span
+        key={stage.stage}
+        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+          stage.done ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-400"
+        }`}
+      >
+        {stage.shortLabel}
+      </span>
+    ))}
+  </div>
+);
 
 const AdminStatusPanel = ({
   filters,
@@ -138,6 +154,14 @@ const AdminStatusPanel = ({
         </FilterLabel>
       </div>
 
+      {(filters.lotNo.trim() || filters.stage || filters.status || filters.clothType.trim() || filters.partyName.trim() || filters.greyPartyName.trim() || filters.startDate || filters.endDate) && lots.length === 1 && (
+        <div className="border-t border-slate-200 px-4 py-4 sm:px-6">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Filtered Lot Progress</p>
+          <p className="mt-2 text-sm font-semibold text-slate-900">Lot #{lots[0].lot_no}</p>
+          <div className="mt-3">{renderStageProgress(lots[0])}</div>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2 border-t border-slate-200 px-4 py-4 sm:px-6">
         <button type="button" onClick={onExportPdf} disabled={!lots.length} className="btn-dark disabled:opacity-60">
           Download PDF
@@ -189,6 +213,10 @@ const AdminStatusPanel = ({
               <p>Processed: {getProcessedMeters(lot).toFixed(2)}</p>
               <p>Created: {toPrintableDate(lot.created_at)}</p>
             </div>
+            <div className="mt-3 text-xs text-slate-600">
+              <p className="mb-2 font-semibold uppercase tracking-[0.18em] text-[10px] text-slate-400">Progress</p>
+              {renderStageProgress(lot)}
+            </div>
           </div>
         ))}
       </div>
@@ -205,13 +233,14 @@ const AdminStatusPanel = ({
               <th className="py-3 pr-3">Cloth</th>
               <th className="py-3 pr-3">Processed</th>
               <th className="py-3 pr-3">Created</th>
+              <th className="py-3 pr-3">Progress</th>
               <th className="py-3 pr-0">Action</th>
             </tr>
           </thead>
           <tbody>
             {!loadingLots && !lots.length && (
               <tr>
-                <td colSpan={9} className="py-10 text-center text-sm text-slate-500">
+                <td colSpan={10} className="py-10 text-center text-sm text-slate-500">
                   No lots found for selected filters.
                 </td>
               </tr>
@@ -228,6 +257,7 @@ const AdminStatusPanel = ({
                 <td className="py-4 pr-3">{lot.cloth_type || "-"}</td>
                 <td className="py-4 pr-3">{getProcessedMeters(lot).toFixed(2)}</td>
                 <td className="py-4 pr-3">{toPrintableDate(lot.created_at)}</td>
+                <td className="py-4 pr-3">{renderStageProgress(lot)}</td>
                 <td className="py-4 pr-0">
                   <button
                     type="button"
@@ -248,3 +278,4 @@ const AdminStatusPanel = ({
 );
 
 export default AdminStatusPanel;
+
