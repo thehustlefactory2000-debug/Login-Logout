@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 import {
   AdminShellCard,
@@ -9,6 +9,8 @@ import {
   STAGE_RATE_CONFIG,
   STAGE_RATE_STAGE_OPTIONS,
   buildBillingRows,
+  formatStageParameter,
+  getStageRateRecord,
   normalizeStageParameter,
   getStatusTone,
   toPrintableDate,
@@ -145,6 +147,38 @@ const AdminBillingPanel = () => {
     return [...seen.values()];
   }, [allRows, draftFilters.stage]);
 
+  const selectedRateSummary = useMemo(() => {
+    if (!draftFilters.stage) return null;
+    const parameterValue = normalizeStageParameter(draftFilters.parameterValue);
+    const rateRecord = getStageRateRecord(stageRates, draftFilters.stage, parameterValue);
+    const meterRate = rateRecord?.meter_rate == null ? null : Number(rateRecord.meter_rate);
+    const taggasRate = rateRecord?.taggas_rate == null ? null : Number(rateRecord.taggas_rate);
+    return {
+      stageLabel: STAGE_RATE_CONFIG[draftFilters.stage]?.label || draftFilters.stage,
+      parameterLabel: formatStageParameter(draftFilters.stage, parameterValue),
+      meterRate,
+      taggasRate,
+      status: rateRecord ? (rateRecord.is_active ? "active" : "inactive") : "not_set",
+    };
+  }, [draftFilters.parameterValue, draftFilters.stage, stageRates]);
+  useEffect(() => {
+    if (!draftFilters.stage) return;
+    const parameterValue = normalizeStageParameter(draftFilters.parameterValue);
+    const rateRecord = getStageRateRecord(stageRates, draftFilters.stage, parameterValue);
+    const hasMeter = rateRecord?.meter_rate != null;
+    const hasTaggas = rateRecord?.taggas_rate != null;
+    let nextRateSet = "";
+    if (hasMeter && hasTaggas) nextRateSet = "both";
+    else if (hasMeter && !hasTaggas) nextRateSet = "meter_only";
+    else if (!hasMeter && hasTaggas) nextRateSet = "taggas_only";
+    else nextRateSet = "not_set";
+
+    setDraftFilters((prev) => {
+      if (!prev.stage || prev.rateSet === nextRateSet) return prev;
+      return { ...prev, rateSet: nextRateSet };
+    });
+  }, [draftFilters.parameterValue, draftFilters.stage, stageRates]);
+
   const filteredRows = useMemo(() => {
     return allRows.filter((row) => {
       if (appliedFilters.stage && row.stage !== appliedFilters.stage) return false;
@@ -184,6 +218,150 @@ const AdminBillingPanel = () => {
     }
     return count;
   }, [filteredRows, selectedRowIds]);
+
+  const exportBillingCsv = () => {
+    if (!filteredRows.length) return;
+    const headers = [
+      "Lot No",
+      "Stage",
+      "Parameter",
+      "Status",
+      "Party",
+      "Grey Party",
+      "Cloth Type",
+      "Processed Meters",
+      "Taggas",
+      "Meter Rate",
+      "Meter Amount",
+      "Taggas Rate",
+      "Taggas Amount",
+      "Paid",
+      "Paid Unit",
+      "Paid Amount",
+      "Paid At",
+      "Created At",
+    ];
+    const escape = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const lines = [headers.map(escape).join(",")];
+
+    for (const row of filteredRows) {
+      lines.push(
+        [
+          row.lotNo,
+          row.stageLabel,
+          row.parameterLabel,
+          row.status,
+          row.partyName,
+          row.greyPartyName,
+          row.clothType,
+          row.processedMeters.toFixed(2),
+          row.taggas.toFixed(2),
+          row.meterRate == null ? "" : row.meterRate.toFixed(2),
+          row.meterAmount.toFixed(2),
+          row.taggasRate == null ? "" : row.taggasRate.toFixed(2),
+          row.taggasAmount.toFixed(2),
+          row.paid ? "Paid" : "Unpaid",
+          row.paidUnit || "",
+          row.paid ? row.paidAmount.toFixed(2) : "",
+          row.paid ? toPrintableDate(row.paidAt) : "",
+          toPrintableDate(row.createdAt),
+        ]
+          .map(escape)
+          .join(","),
+      );
+    }
+
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `stage_billing_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportBillingPdf = () => {
+    if (!filteredRows.length) return;
+    const rowsHtml = filteredRows
+      .map(
+        (row) => `
+          <tr>
+            <td>${row.lotNo ?? ""}</td>
+            <td>${row.stageLabel ?? ""}</td>
+            <td>${row.parameterLabel ?? ""}</td>
+            <td>${row.status ?? ""}</td>
+            <td>${row.partyName ?? ""}</td>
+            <td>${row.greyPartyName ?? ""}</td>
+            <td>${row.clothType ?? ""}</td>
+            <td>${row.processedMeters.toFixed(2)}</td>
+            <td>${row.taggas.toFixed(2)}</td>
+            <td>${row.meterRate == null ? "-" : row.meterRate.toFixed(2)}</td>
+            <td>${row.meterAmount.toFixed(2)}</td>
+            <td>${row.taggasRate == null ? "-" : row.taggasRate.toFixed(2)}</td>
+            <td>${row.taggasAmount.toFixed(2)}</td>
+            <td>${row.paid ? "Paid" : "Unpaid"}</td>
+            <td>${row.paidUnit ?? ""}</td>
+            <td>${row.paid ? row.paidAmount.toFixed(2) : ""}</td>
+            <td>${row.paid ? toPrintableDate(row.paidAt) : ""}</td>
+            <td>${toPrintableDate(row.createdAt)}</td>
+          </tr>
+        `,
+      )
+      .join("");
+
+    const html = `
+      <html>
+      <head>
+        <title>Stage Billing Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; }
+          h1 { font-size: 18px; margin: 0 0 12px; }
+          table { width: 100%; border-collapse: collapse; font-size: 11px; }
+          th, td { border: 1px solid #ddd; padding: 6px; text-align: left; }
+          th { background: #f5f5f5; }
+        </style>
+      </head>
+      <body>
+        <h1>Stage Billing Report - ${new Date().toLocaleString()}</h1>
+        <table>
+          <thead>
+            <tr>
+              <th>Lot No</th>
+              <th>Stage</th>
+              <th>Parameter</th>
+              <th>Status</th>
+              <th>Party</th>
+              <th>Grey Party</th>
+              <th>Cloth</th>
+              <th>Processed Mtr</th>
+              <th>Taggas</th>
+              <th>Meter Rate</th>
+              <th>Meter Amount</th>
+              <th>Taggas Rate</th>
+              <th>Taggas Amount</th>
+              <th>Paid</th>
+              <th>Paid Unit</th>
+              <th>Paid Amount</th>
+              <th>Paid At</th>
+              <th>Created At</th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </body>
+      </html>
+    `;
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
 
   const setDraftField = (key, value) => {
     setDraftFilters((prev) => {
@@ -420,12 +598,34 @@ const AdminBillingPanel = () => {
           </FilterLabel>
         </div>
 
+        {selectedRateSummary && (
+          <div className="border-t border-slate-200 px-4 py-4 text-sm sm:px-6">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Selected Rate</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+              <span className="font-semibold text-slate-900">{selectedRateSummary.stageLabel}</span>
+              <span className="text-slate-300">•</span>
+              <span>{selectedRateSummary.parameterLabel}</span>
+              <span className="text-slate-300">•</span>
+              <span>Meter: {selectedRateSummary.meterRate == null ? "-" : selectedRateSummary.meterRate.toFixed(2)}</span>
+              <span className="text-slate-300">•</span>
+              <span>Taggas: {selectedRateSummary.taggasRate == null ? "-" : selectedRateSummary.taggasRate.toFixed(2)}</span>
+              <span className={`status-pill ${selectedRateSummary.status === "active" ? "success" : selectedRateSummary.status === "inactive" ? "warn" : "danger"}`}>{selectedRateSummary.status.replaceAll("_", " ")}</span>
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap gap-2 border-t border-slate-200 px-4 py-4 sm:px-6">
           <button type="button" onClick={applyFilters} className="btn-primary">
             Show Billing
           </button>
           <button type="button" onClick={() => { setDraftFilters(emptyDraftFilters); setAppliedFilters(emptyDraftFilters); setSelectedRowIds(new Set()); }} className="btn-secondary">
             Reset
+          </button>
+          <button type="button" onClick={exportBillingPdf} disabled={!filteredRows.length} className="btn-dark disabled:opacity-60">
+            Download PDF
+          </button>
+          <button type="button" onClick={exportBillingCsv} disabled={!filteredRows.length} className="btn-primary disabled:opacity-60">
+            Download Excel
           </button>
         </div>
       </AdminShellCard>
@@ -537,7 +737,7 @@ const AdminBillingPanel = () => {
 
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                       <span>{toPrintableDate(row.createdAt)}</span>
-                      <span className="text-slate-300">�</span>
+                      <span className="text-slate-300">•</span>
                       {lotPaidMap.get(row.lotId) ? (
                         <span className="status-pill success">Lot paid</span>
                       ) : (
@@ -777,6 +977,8 @@ const AdminBillingPanel = () => {
 };
 
 export default AdminBillingPanel;
+
+
 
 
 
