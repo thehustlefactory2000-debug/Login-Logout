@@ -9,14 +9,41 @@ const buildWhatsAppUrl = (phone, message) => {
   return `https://api.whatsapp.com/send?phone=${digits}&text=${encodeURIComponent(message)}`;
 };
 
-const buildWhatsAppMessage = (lot) => {
-  const lotNo = lot?.lot_no ?? "-";
-  const clothType = lot?.cloth_type || "-";
+const formatValue = (value) => (value == null || value === "" ? "-" : value);
+
+const buildWhatsAppMessage = (lot, inward) => {
+  const lotNo = formatValue(lot?.lot_no);
+  const clothType = formatValue(lot?.cloth_type);
+  const entryDate = formatValue(inward?.entry_date || lot?.entry_date);
+  const partyName = formatValue(lot?.party?.name);
+  const partyPhone = formatValue(inward?.party_phone);
+  const greyPartyName = formatValue(lot?.grey_party?.name);
+  const meters = formatValue(inward?.meters);
+  const jodis = formatValue(inward?.jodis);
+  const length = formatValue(inward?.length);
+  const width = formatValue(inward?.width);
+  const quantity = formatValue(inward?.quantity);
+  const tagge = formatValue(inward?.tagge);
+  const foldDetails = formatValue(inward?.fold_details);
+  const border = formatValue(inward?.border);
+
   return [
     "Lot Created Successfully",
     "",
-    `• Lot No: ${lotNo}`,
-    `• Cloth Type: ${clothType}`,
+    `- Lot No: ${lotNo}`,
+    `- Entry Date: ${entryDate}`,
+    `- Party: ${partyName}`,
+    `- Party Phone: ${partyPhone}`,
+    `- Grey Party: ${greyPartyName}`,
+    `- Cloth Type: ${clothType}`,
+    `- Meters: ${meters}`,
+    `- Jodis: ${jodis}`,
+    `- Length: ${length}`,
+    `- Width: ${width}`,
+    `- Quality: ${quantity}`,
+    `- Tagge: ${tagge}`,
+    `- Fold Details: ${foldDetails}`,
+    `- Border: ${border}`,
     "",
     "Please use this Lot No for future reference.",
   ].join("\n");
@@ -39,7 +66,7 @@ const GreyInwardPendingList = ({ onCreateNew, onOpenLot, userId }) => {
       const { data, error: fetchError } = await supabase
         .from("lots")
         .select(
-          "id, lot_no, cloth_type, created_at, party:party_id(name), grey_party:grey_party_id(name), grey_inward!inner(meters, jodis, length, width, quantity, tagge, party_phone, is_locked, created_at)",
+          "id, lot_no, cloth_type, entry_date, created_at, party:party_id(name), grey_party:grey_party_id(name), grey_inward!inner(entry_date, meters, jodis, length, width, quantity, tagge, fold_details, border, party_phone, is_locked, created_at)",
         )
         .eq("current_stage", "grey_inward")
         .eq("status", "active")
@@ -247,7 +274,10 @@ const GreyInwardPendingList = ({ onCreateNew, onOpenLot, userId }) => {
             const inward = Array.isArray(lot.grey_inward) ? lot.grey_inward[0] : lot.grey_inward;
             const isLocked = Boolean(inward?.is_locked);
             const isSelected = selectedLotIds.has(lot.id);
-            const whatsappUrl = buildWhatsAppUrl(inward?.party_phone, buildWhatsAppMessage(lot));
+            const whatsappUrl = buildWhatsAppUrl(
+              inward?.party_phone,
+              buildWhatsAppMessage(lot, inward),
+            );
             return (
               <div key={lot.id} className="rounded-xl border border-slate-200/80 bg-white/70 p-3 text-sm shadow-sm">
                 <div className="flex items-center justify-between gap-2">
@@ -307,6 +337,7 @@ const GreyInwardPendingList = ({ onCreateNew, onOpenLot, userId }) => {
 };
 
 export default GreyInwardPendingList;
+
 
 
 
