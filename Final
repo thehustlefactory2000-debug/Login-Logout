@@ -1,0 +1,310 @@
+# Salon PWA – Full Technical Documentation (Project File: Final)
+
+**Overview**
+This app is a React + Vite single-page application designed to run as a PWA and as a Capacitor Android app. It manages a textile lot workflow from grey inward to final folding, with staff dashboards, admin planning, billing, and WhatsApp messaging. Data is stored in Supabase (Postgres) with real-time subscriptions.
+
+**Tech Stack**
+- Frontend: React 18, React Router
+- Build: Vite
+- Styling: Tailwind + custom CSS utilities
+- Backend: Supabase (auth, database, RPCs, realtime, edge functions)
+- PWA: manifest + service worker
+- Mobile: Capacitor Android
+- Hosting: Firebase Hosting (scripts included)
+
+**Environment Variables**
+- `VITE_SUPABASE_URL`: Supabase project URL
+- `VITE_SUPABASE_ANON_KEY`: Supabase anon key
+
+**App Entry & Runtime Flow**
+- `src/main.jsx`
+  - Boots React and router.
+  - Wraps app with `AuthProvider`.
+  - Lazy loads pages.
+  - Registers a cleanup to unregister older service workers matching `/service-worker.js`.
+- `src/App.jsx`
+  - Provides top-level layout and `<Outlet />` for routes.
+
+**Routing & Access Control**
+- `src/main.jsx`
+  - Routes:
+    - `/signin`, `/signup`, `/forgot-password`, `/update-password`
+    - `/admin` (admin only)
+    - `/dashboard` (staff only)
+  - Uses `RoleGuard` for role-based protection.
+- `src/components/RoleGuard.jsx`
+  - Redirects unauthenticated users to `/signin`.
+  - Loads profile and enforces allowed roles.
+
+**Authentication & Profile Loading**
+- `src/context/AuthContext.jsx`
+  - Uses Supabase auth session.
+  - Loads `profiles` row per user.
+  - Realtime subscription for profile updates.
+  - Exposes `user`, `profile`, `loading`, `profileLoading`, `refreshProfile`.
+- `src/lib/supabaseClient.js`
+  - Creates Supabase client and uses localStorage for auth persistence.
+
+**Styling & UI System**
+- `src/index.css`
+  - Defines gradient background, glassmorphism surfaces, button styles, inputs, status pills, and animations.
+  - Uses `Plus Jakarta Sans` and `JetBrains Mono` fonts.
+
+**Core Workflow Concepts**
+- Lots move through stages: `grey_inward ? checking ? bleaching ? masrise ? dyeing ? stenter ? finishing ? folding ? completed`.
+- `current_stage` and `status` live on the `lots` table.
+- Many screens rely on real-time subscriptions to keep UI live.
+
+**Pages**
+- `src/pages/SignIn.jsx`
+  - Supabase email/password login.
+  - Redirects by role to `/admin` or `/dashboard`.
+- `src/pages/SignUp.jsx`
+  - Supabase signup with email verification.
+  - Redirects to sign-in with notice.
+- `src/pages/ForgotPassword.jsx`
+  - Supabase password reset link to `/update-password`.
+- `src/pages/UpdatePassword.jsx`
+  - Updates user password from reset link.
+- `src/pages/Dashboard.jsx`
+  - Staff dashboard shell.
+  - Loads assigned stage and renders the matching stage component.
+- `src/pages/AdminDashboard.jsx`
+  - Admin shell with tabs for roles, status, instructions, rates, billing.
+  - Pulls lots, users, filters, and supports CSV/PDF exports.
+
+**Components – Shared**
+- `src/components/RoleGuard.jsx`
+  - Role-based route guard.
+
+**Components – Admin Shell**
+- `src/components/admin/dashboard/AdminDashboardHeader.jsx`
+  - Sidebar nav with tabs and profile info.
+- `src/components/admin/dashboard/adminDashboardShared.jsx`
+  - Shared constants, helpers, UI components.
+  - Exports: tab definitions, stage labels, metrics, CSV builders, billing helpers.
+- `src/components/admin/dashboard/AdminRolesPanel.jsx`
+  - Edit user roles and assigned stages.
+  - Delete staff accounts.
+- `src/components/admin/dashboard/AdminStatusPanel.jsx`
+  - Filters and lists lots.
+  - Shows progress badges and stats.
+  - CSV/PDF export.
+- `src/components/admin/dashboard/AdminInstructionsPanel.jsx`
+  - Loads a lot by number and edits downstream stage plan.
+  - Can insert/delete planned stage rows for bleaching/masrise/dyeing/stenter/finishing/folding.
+- `src/components/admin/dashboard/AdminRatesPanel.jsx`
+  - CRUD for stage rates (meter + taggas).
+  - Activates/deactivates rows.
+- `src/components/admin/dashboard/AdminBillingPanel.jsx`
+  - Computes payable rows from lots + rates + payments.
+  - Filters, exports, and payment actions (single or bulk).
+- `src/components/admin/dashboard/AdminWhatsAppPanel.jsx`
+  - Wraps WhatsApp test tooling in the admin shell.
+
+**Components – WhatsApp**
+- `src/components/admin/WhatsAppTestPanel.jsx`
+  - Sends WhatsApp template messages via Supabase Edge Function `whatsapp`.
+- `src/components/admin/WhatsAppReportPanel.jsx`
+  - Sends WhatsApp summary of lot status (up to 15 lines) based on current admin filters.
+
+**Components – Grey Inward**
+- `src/components/stages/GreyInwardEntryForm.jsx`
+  - Form to create/update lot + grey inward data.
+  - Auto-calculates meters from `jodis × length`.
+  - Uses `get_next_lot_no()` RPC for lot numbering.
+  - Saves to `lots`, `grey_inward`, `cloth_types`, and `parties`.
+  - Locks lot when sending to checking via `send_grey_inward_to_checking` RPC.
+- `src/components/stages/GreyInwardPendingList.jsx`
+  - Lists grey inward lots not yet sent to checking.
+  - Searchable and allows bulk send to checking.
+  - WhatsApp link sends full inward details to party.
+
+**Components – Checking**
+- `src/components/stages/CheckingStagePanel.jsx`
+  - List and form flow for checking stage.
+  - Auto-fills data from grey inward.
+  - Calculates checked meters and less/short.
+  - Lets user select downstream stages and create stage instruction rows.
+  - On release, locks checking + grey inward and calls `syncLotWorkflowState`.
+
+**Components – Stage Dashboards (Bleaching, Masrise, Dyeing, Stenter, Finishing, Folding)**
+Each follows the same pattern: list, search, open, mark completed, and bulk complete.
+- `src/components/stages/BleachingStagePanel.jsx`
+  - Shows bleach group/type and planned meters.
+- `src/components/stages/MasriseStagePanel.jsx`
+  - Shows instruction and planned meters.
+- `src/components/stages/DyeingStagePanel.jsx`
+  - Shows bleach group/type and planned input.
+- `src/components/stages/StenterStagePanel.jsx`
+  - Shows bleaching info and stenter type (if any).
+- `src/components/stages/FinishingStagePanel.jsx`
+  - Shows finishing type and planned meters.
+- `src/components/stages/FoldingStagePanel.jsx`
+  - Shows folding type and planned meters.
+
+**Components – Generic Stage Form**
+- `src/components/stages/StageEntryForm.jsx`
+  - Generic form for any stage configured in `STAGE_FORM_CONFIG`.
+  - Used when assigned stage has a config but does not have a custom panel.
+
+**Constants**
+- `src/constants/workflow.js`
+  - Stage labels and `STAGE_FORM_CONFIG` used by `StageEntryForm`.
+
+**Lib Utilities**
+- `src/lib/lotWorkflow.js`
+  - Syncs `current_stage` based on planned stage records.
+  - Marks stage records completed and sets `is_locked`.
+- `src/lib/stageSearch.js`
+  - Search index builder and filter helper for stage lists.
+- `src/lib/errorHandler.js`
+  - Retry + timeout helper (not currently imported in app code).
+- `src/lib/sessionManager.js`
+  - Session lifecycle helper (not currently imported in app code).
+- `src/lib/validation.js`
+  - Email/password/numeric validation (not currently imported in app code).
+- `src/lib/dbTransactions.js`
+  - Placeholder transaction utility (CommonJS; not used by app).
+
+**PWA & Public Assets**
+- `public/manifest.json`
+  - Defines PWA name, icon, and theme colors.
+- `public/service-worker.js`
+  - Basic cache-first strategy for a small static set of files.
+  - Note: `src/main.jsx` unregisters service workers, so this script may not be active in production unless re-enabled.
+- `public/vite.svg`
+  - App icon.
+
+**Config & Tooling**
+- `vite.config.js`
+  - Vite build configuration.
+- `tailwind.config.js` and `postcss.config.js`
+  - Tailwind/PostCSS configuration.
+- `eslint.config.js`
+  - ESLint config.
+- `capacitor.config.json`
+  - Capacitor app setup for Android build.
+- `firebase.json` and `.firebaserc`
+  - Firebase Hosting deployment config.
+- `package.json`
+  - Scripts: `dev`, `build`, `preview`, `deploy` (Firebase).
+
+**Database Schema (Supabase / Postgres)**
+This is the resulting structure after migrations. Key tables, fields, and relations:
+
+- `profiles`
+  - `id` (uuid, PK, auth.users reference)
+  - `email`, `name`, `role` (`admin` or `staff`), `assigned_stage`
+  - RLS: admins can manage all; users can read self.
+
+- `parties`
+  - Master list of party and grey party names.
+  - `type` is `party` or `grey_party`.
+
+- `cloth_types`
+  - Master list for cloth type names.
+
+- `lots`
+  - Primary workflow record.
+  - `lot_no` identity integer, unique.
+  - `party_id`, `grey_party_id`, `cloth_type`.
+  - `current_stage` and `status`.
+  - `entry_date` (explicit date, default `current_date`).
+
+- `grey_inward`
+  - One record per lot.
+  - `meters`, `jodis`, `length`, `width`, `quantity`, `tagge`, `fold_details`, `border`.
+  - `party_phone` stored for WhatsApp.
+  - `entry_date` (explicit date).
+  - `is_locked` indicates sent to checking.
+
+- `grey_checking`
+  - One record per lot.
+  - `checking_method`, `checked_meters`, `checked_length`, `jodis`, `taggas`, `tp`, `fold`.
+  - `less_short_meters`, `less_short_jodis` with manual flags.
+  - `is_locked` indicates released to next stages.
+
+- `bleaching`
+  - One record per lot.
+  - `bleach_group_no`, `bleach_type`, `input_meters`, `output_meters`.
+  - `next_stage` = `dyeing` or `stenter`.
+
+- `masrise`
+  - Optional stage.
+  - `input_meters`, `completed_meters`, `instruction`, `completed_details`.
+
+- `dyeing`
+  - One record per lot.
+  - `dyeing_group_no`, `input_meters`, `dyed_meters`, `sent_to_stenter`.
+
+- `stenter`
+  - One record per lot.
+  - `stenter_no`, `input_meters`, `stentered_meters`, `stenter_type`.
+
+- `finishing`
+  - One record per lot.
+  - `input_meters`, `finished_meters`, `finishing_type`.
+
+- `folding`
+  - One record per lot.
+  - `input_meters`, `folding_type`, `worker_name`.
+
+- `stage_logs`
+  - Audit table for stage actions.
+
+- `stage_rates`
+  - Admin-configured pricing.
+  - `stage`, `parameter_value`.
+  - `meter_rate`, `taggas_rate` (dual rate support).
+  - `is_active`.
+
+- `stage_payments`
+  - Payment records per lot stage.
+  - `paid_unit` is `meters` or `taggas`.
+  - Stores processed meters, taggas, rates, paid amount, paid time.
+
+**Database Functions & Triggers**
+- Stage transitions are automated via triggers in base schema.
+- Manual-send RPCs exist for each stage to lock and move lots when required.
+- `get_next_lot_no()` returns next lot number from current max.
+- `delete_lot()` RPC deletes a lot and resets lot number sequence.
+- `set_grey_inward_meters()` trigger keeps meters = jodis × length.
+
+**Row Level Security (RLS)**
+- `profiles` uses admin-only updates and deletes.
+- `lots` and stage tables allow authenticated select/insert/update.
+- Admin-only delete rules for lots and stage tables.
+
+**Database Migrations Summary**
+- Base workflow schema in `2026-02-26_lot_workflow_schema.sql`.
+- Manual send RPCs for each stage.
+- Added masrise stage and RLS.
+- Added `entry_date` columns to lots/grey_inward.
+- Added `party_phone` on grey inward.
+- Added `length`, `width`, `quantity` to grey inward.
+- Added `checked_length` and `less_short` split to grey checking.
+- Added `stenter_type` for billing & reporting.
+- Added `stage_rates` (then expanded to meter + taggas dual rates).
+- Added `stage_payments` table for billing.
+
+**Notes & Known Implementation Details**
+- `src/lib/dbTransactions.js`, `src/lib/sessionManager.js`, and `src/lib/validation.js` are CommonJS utilities and are not referenced in the React code. They may be placeholders.
+- The PWA service worker exists but is currently unregistered on load in `src/main.jsx`.
+
+**Project Structure Quick Map**
+- `src/`
+  - `App.jsx` – root layout
+  - `main.jsx` – router + app bootstrap
+  - `index.css` – UI system and Tailwind utilities
+  - `pages/` – auth screens + dashboards
+  - `components/` – stage panels and admin panels
+  - `context/` – auth context
+  - `lib/` – workflow helpers and Supabase client
+  - `constants/` – workflow config and labels
+  - `db/` – Supabase schema and migrations
+- `public/` – PWA manifest + service worker
+- `android/` – Capacitor Android project
+- `firebase.json` – hosting configuration
+
+End of documentation.

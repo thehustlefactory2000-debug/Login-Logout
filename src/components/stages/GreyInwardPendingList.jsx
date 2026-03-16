@@ -315,7 +315,6 @@ const GreyInwardPendingList = ({ onCreateNew, onOpenLot, userId }) => {
                   </div>
                 </div>
                 <p>Party: {lot.party?.name || "-"}</p>
-                <p>Party Phone: {inward?.party_phone || "-"}</p>
                 <p>Grey Party: {lot.grey_party?.name || "-"}</p>
                 <p>Cloth: {lot.cloth_type || "-"}</p>
                 <p>Meters: {inward?.meters ?? "-"}</p>
